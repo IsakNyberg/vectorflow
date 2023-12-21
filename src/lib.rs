@@ -146,20 +146,20 @@ impl AnimationCanvas {
     fn render(&mut self, delta: f64) {
         let canvas: HtmlCanvasElement = self.canvas.cast().unwrap();
         let ctx: CanvasRenderingContext2d = canvas.get_context("2d").unwrap().unwrap().unchecked_into();
-        ctx.set_global_alpha(0.01); // lower values make the trails longer
+
+        ctx.set_global_alpha(0.01);  // lower values make the trails longer
         ctx.set_fill_style(&JsValue::from("#000"));
         ctx.fill_rect(0.0, 0.0, canvas.width().into(), canvas.height().into());
         ctx.set_global_alpha(1.0);
-        let particles = &mut self.particles;
 
-        particles.iter_mut().for_each(|particle: &mut Particle| {
+        ctx.set_fill_style(&JsValue::from(&self.config.colour));
+        for particle in self.particles.iter_mut() {
             if particle.update(&self.config.lambda, delta) {
                 render_particle(&self.config, particle, &ctx);
             } else {
                 particle.respawn();
             }
-        });
-
+        }
 
         window()
             .unwrap()
@@ -168,15 +168,11 @@ impl AnimationCanvas {
     }
 
 }
+
 fn render_particle(config: &Config, particle: &Particle, ctx: &CanvasRenderingContext2d) {
-    ctx.begin_path();
-    let js_rgb = config.colour.as_str();
-    ctx.set_fill_style(&JsValue::from_str(js_rgb.as_ref()));
     let x = particle.pos.0 + config.width as f64 / 2.0;
     let y = particle.pos.1 + config.height as f64 / 2.0;
     ctx.fill_rect(x, y, 1.0, 1.0);
-
-    ctx.fill();
 }
 
 #[function_component(App)]
