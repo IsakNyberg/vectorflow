@@ -1,6 +1,7 @@
 
 use rand::{thread_rng, Rng};
 
+#[derive(Clone, Copy)]
 pub struct Particle {
     pub pos: (f64, f64),
     pub velocity: (f64, f64),

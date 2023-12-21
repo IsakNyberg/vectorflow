@@ -108,16 +108,14 @@ impl Component for AnimationCanvas {
                         info!(" FPS: {}    {}", avg_fps as i32, self.config.num_particles);
                     }
                     
-                    while self.particles.len() < self.config.num_particles {
-                        self.particles.push(Particle::new(
+                    self.particles.resize(
+                        self.config.num_particles,
+                        Particle::new(
                             (self.config.width as i32 / -2, self.config.width as i32 / 2),
                             (self.config.height as i32 / -2, self.config.height as i32 / 2),
                             self.config.avg_lifetime,
-                        ));
-                    }
-                    while self.particles.len() > self.config.num_particles {
-                        self.particles.pop();
-                    }
+                        ),
+                    );
                 }
 
 
