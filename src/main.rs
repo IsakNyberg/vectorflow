@@ -22,7 +22,6 @@ struct Config {
     height: usize,
     num_particles: usize,
     avg_lifetime: i32,
-    avg_size: f64,
     colour: String,
     lambda: Box<dyn Fn((f64, f64)) -> (f64, f64)>,
     target_fps: f64,
@@ -48,13 +47,15 @@ impl Component for AnimationCanvas {
         let config = Config {
             width: window().unwrap().inner_width().unwrap().as_f64().unwrap() as usize,
             height: window().unwrap().inner_height().unwrap().as_f64().unwrap() as usize,
-            num_particles: 1000,
-            avg_lifetime: 1000,
-            avg_size: 1.0,
+            num_particles: 17000,
+            avg_lifetime: 100,
             colour: String::from("#1ce"),
-            target_fps: 60.0,
+            target_fps: 30.0,
             lambda: Box::new(|(x, y)| {
-                ((-x+750.0)*0.5, (-y+400.0)*0.5)
+                let theta = 400.0 / (x * x + y * y).sqrt();
+                let x = x * theta.cos() - y * theta.sin();
+                let y = x * theta.sin() + y * theta.cos();
+                (x, y)
             }),
         };
         Self {
@@ -78,10 +79,9 @@ impl Component for AnimationCanvas {
                 self.particles = Vec::with_capacity(self.config.num_particles);
                 for _ in 0..self.config.num_particles {
                     self.particles.push(Particle::new(
-                        self.config.width,
-                        self.config.height,
+                        (self.config.width as i32 / -2, self.config.width as i32 / 2),
+                        (self.config.height as i32 / -2, self.config.height as i32 / 2),
                         self.config.avg_lifetime,
-                        self.config.avg_size,
                     ));
                 }
 
@@ -96,11 +96,11 @@ impl Component for AnimationCanvas {
                 if self.frame_count % 25 == 0 {    
                     let avg_fps = self.fps_history.iter().sum::<f64>() / self.fps_history.len() as f64;
                     if avg_fps > self.config.target_fps * 1.1 {
-                        self.config.num_particles = (self.config.num_particles as f64*1.01) as usize;
+                        self.config.num_particles = (self.config.num_particles as f64*1.05) as usize;
                         info!(" +FPS: {}    {}", avg_fps as i32, self.config.num_particles);
 
                     } else if avg_fps < self.config.target_fps * 0.9 {
-                        self.config.num_particles = (self.config.num_particles as f64*0.99) as usize;
+                        self.config.num_particles = (self.config.num_particles as f64*0.95) as usize;
                         info!("-FPS: {}    {}", avg_fps as i32, self.config.num_particles);
                     } else {
                         info!(" FPS: {}    {}", avg_fps as i32, self.config.num_particles);
@@ -108,10 +108,9 @@ impl Component for AnimationCanvas {
                     
                     while self.particles.len() < self.config.num_particles {
                         self.particles.push(Particle::new(
-                            self.config.width,
-                            self.config.height,
+                            (self.config.width as i32 / -2, self.config.width as i32 / 2),
+                            (self.config.height as i32 / -2, self.config.height as i32 / 2),
                             self.config.avg_lifetime,
-                            self.config.avg_size,
                         ));
                     }
                     while self.particles.len() > self.config.num_particles {
@@ -147,7 +146,7 @@ impl AnimationCanvas {
     fn render(&mut self, delta: f64) {
         let canvas: HtmlCanvasElement = self.canvas.cast().unwrap();
         let ctx: CanvasRenderingContext2d = canvas.get_context("2d").unwrap().unwrap().unchecked_into();
-        ctx.set_global_alpha(0.05);
+        ctx.set_global_alpha(0.01); // lower values make the trails longer
         ctx.set_fill_style(&JsValue::from("#000"));
         ctx.fill_rect(0.0, 0.0, canvas.width().into(), canvas.height().into());
         ctx.set_global_alpha(1.0);
@@ -173,9 +172,10 @@ fn render_particle(config: &Config, particle: &Particle, ctx: &CanvasRenderingCo
     ctx.begin_path();
     let js_rgb = config.colour.as_str();
     ctx.set_fill_style(&JsValue::from_str(js_rgb.as_ref()));
-    let x = particle.pos.0;
-    let y = particle.pos.1;
-    ctx.arc(x,y,particle.size.into(),0.0,std::f64::consts::PI*2.0).unwrap();
+    let x = particle.pos.0 + config.width as f64 / 2.0;
+    let y = particle.pos.1 + config.height as f64 / 2.0;
+    ctx.fill_rect(x, y, 1.0, 1.0);
+
     ctx.fill();
 }
 
