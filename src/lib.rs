@@ -22,7 +22,8 @@ struct Config {
     height: usize,
     num_particles: usize,
     avg_lifetime: i32,
-    colour: String,
+    fg_colour: JsValue,
+    bg_colour: JsValue,
     lambda: Box<dyn Fn((f64, f64)) -> (f64, f64)>,
     target_fps: f64,
 }
@@ -49,7 +50,8 @@ impl Component for AnimationCanvas {
             height: window().unwrap().inner_height().unwrap().as_f64().unwrap() as usize,
             num_particles: 17000,
             avg_lifetime: 100,
-            colour: String::from("#1ce"),
+            fg_colour: JsValue::from("#1ce"),
+            bg_colour: JsValue::from("#000"),
             target_fps: 30.0,
             lambda: Box::new(|(x, y)| {
                 let theta = 400.0 / (x * x + y * y).sqrt();
@@ -148,11 +150,11 @@ impl AnimationCanvas {
         let ctx: CanvasRenderingContext2d = canvas.get_context("2d").unwrap().unwrap().unchecked_into();
 
         ctx.set_global_alpha(0.01);  // lower values make the trails longer
-        ctx.set_fill_style(&JsValue::from("#000"));
+        ctx.set_fill_style(&self.config.bg_colour);
         ctx.fill_rect(0.0, 0.0, canvas.width().into(), canvas.height().into());
         ctx.set_global_alpha(1.0);
 
-        ctx.set_fill_style(&JsValue::from(&self.config.colour));
+        ctx.set_fill_style(&self.config.fg_colour);
         for particle in self.particles.iter_mut() {
             if particle.update(&self.config.lambda, delta) {
                 render_particle(&self.config, particle, &ctx);
