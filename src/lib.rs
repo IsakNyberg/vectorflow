@@ -1,6 +1,3 @@
-
-use std::vec;
-
 use wasm_bindgen::{prelude::{Closure, wasm_bindgen}, JsCast, JsValue};
 use web_sys::window;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
@@ -18,8 +15,8 @@ pub enum Msg {
 }
 
 const TARGET_FPS: f64 = 64.0;
-const FPS_HISTORY_SIZE: usize = 4 * TARGET_FPS as usize;
-const STARTING_NUM_PARTICLES: usize = 30000;
+const FPS_HISTORY_SIZE: usize = TARGET_FPS as usize;
+const STARTING_NUM_PARTICLES: usize = 30_000;
 const BACKGROUND_COLOUR: &str = "#000";
 const FOREGROUND_COLOUR: &str = "#1ce";
 
@@ -86,10 +83,12 @@ impl Component for AnimationCanvas {
                 canvas.set_width(self.config.width.try_into().unwrap());
                 canvas.set_height(self.config.height.try_into().unwrap());
                 self.particles = Vec::with_capacity(STARTING_NUM_PARTICLES);
+                let w = self.config.width as i32;
+                let h = self.config.height as i32;
                 for _ in 0..STARTING_NUM_PARTICLES {
                     self.particles.push(Particle::new(
-                        (self.config.width as i32 / -2, self.config.width as i32 / 2),
-                        (self.config.height as i32 / -2, self.config.height as i32 / 2),
+                        (-w, w),
+                        (-h, h),
                         self.config.avg_lifetime,
                     ));
                 }
@@ -117,16 +116,21 @@ impl Component for AnimationCanvas {
                     let target_num_particles = self.particles.len() as f64 * fps_ratio;
                     info!("FPS: {}    {}", self.average_fps as i32, target_num_particles as i32);
                     
+
+                    let w = self.config.width as i32;
+                    let h = self.config.height as i32;
                     self.particles.resize(
                         target_num_particles as usize,
                         Particle::new(
-                            (self.config.width as i32 / -2, self.config.width as i32 / 2),
-                            (self.config.height as i32 / -2, self.config.height as i32 / 2),
+                            (-w, w),
+                            (-h, h),
                             self.config.avg_lifetime,
                         ),
                     );
+                    true
+                } else {
+                    false
                 }
-                false
             }
         }
     }
@@ -134,9 +138,12 @@ impl Component for AnimationCanvas {
     fn view(&self, _ctx: &Context<Self>) -> Html {
         html! {
             <div>
+                <div style="position: absolute; top: 0; left: 0; color: white;"> 
+                    {"FPS: "} {self.average_fps as usize } {"    Particles: "} {self.particles.len()}
+                </div>
                 <canvas
                     id="canvas"
-                    ref={info!("rendered canvas"); self.canvas.clone()}>
+                    ref={self.canvas.clone()}>
                 </canvas>
             </div>
         }
@@ -175,7 +182,6 @@ fn render_particle(config: &Config, particle: &Particle, ctx: &CanvasRenderingCo
     let y = particle.pos.1 + (config.height as f64 / 2.0);
     ctx.fill_rect(x, y, 1.0, 1.0);
 }
-
 
 #[function_component(App)]
 fn app_body() -> Html {
