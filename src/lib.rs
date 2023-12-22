@@ -18,7 +18,7 @@ pub enum Msg {
 }
 
 const TARGET_FPS: f64 = 64.0;
-const FPS_HISTORY_SIZE: usize = 2 * TARGET_FPS as usize;
+const FPS_HISTORY_SIZE: usize = 4 * TARGET_FPS as usize;
 const STARTING_NUM_PARTICLES: usize = 30000;
 const BACKGROUND_COLOUR: &str = "#000";
 const FOREGROUND_COLOUR: &str = "#1ce";
@@ -115,7 +115,7 @@ impl Component for AnimationCanvas {
                     let min_ratio: f64 = 0.8;
                     let fps_ratio = min_ratio.max(max_ratio.min(self.average_fps / self.config.target_fps));
                     let target_num_particles = self.particles.len() as f64 * fps_ratio;
-                    info!("FPS: {}    {}", self.average_fps as i32, target_num_particles);
+                    info!("FPS: {}    {}", self.average_fps as i32, target_num_particles as i32);
                     
                     self.particles.resize(
                         target_num_particles as usize,
@@ -189,5 +189,5 @@ fn app_body() -> Html {
 #[wasm_bindgen(start)]
 pub fn main() {
     wasm_logger::init(wasm_logger::Config::default());
-    yew::start_app::<App>();
+    yew::Renderer::<App>::new().render();
 }
