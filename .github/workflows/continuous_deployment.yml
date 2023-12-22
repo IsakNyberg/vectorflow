@@ -2,7 +2,7 @@
 name: Continuous deployment
 on:
   workflow_run:
-    branches: [main]
+    branches: [gh-pages]
     workflows: [Continuous integration]
     types: [completed]
 
