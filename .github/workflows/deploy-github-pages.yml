@@ -41,7 +41,7 @@ jobs:
         run: trunk build --public-url ${{ github.event.repository.name }}
 
       - name: Setup Pages
-        uses: actions/configure-pages@v2
+        uses: actions/configure-pages@v4
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -53,6 +53,7 @@ jobs:
     permissions:
       pages: write
       id-token: write
+      actions: read
     
     environment:
       name: github-pages
