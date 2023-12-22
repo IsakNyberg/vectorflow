@@ -17,10 +17,15 @@ pub enum Msg {
     Render,
 }
 
+const TARGET_FPS: f64 = 64.0;
+const FPS_HISTORY_SIZE: usize = 2 * TARGET_FPS as usize;
+const STARTING_NUM_PARTICLES: usize = 30000;
+const BACKGROUND_COLOUR: &str = "#000";
+const FOREGROUND_COLOUR: &str = "#1ce";
+
 struct Config {
     width: usize,
     height: usize,
-    num_particles: usize,
     avg_lifetime: i32,
     fg_colour: JsValue,
     bg_colour: JsValue,
@@ -33,14 +38,17 @@ struct AnimationCanvas {
     particles: Vec<Particle>,
     callback: Closure<dyn FnMut()>,
     config: Config,
-    last_time_rendered: f64,
+
+    last_render_time: f64,
     fps_history: Vec<f64>,
+    average_fps: f64,
     frame_count: usize,
 }
 
 impl Component for AnimationCanvas {
     type Message = Msg;
     type Properties = ();
+
     fn create(ctx: &Context<Self>) -> Self {
         ctx.link().send_future(async {Msg::Init});
         let comp_ctx = ctx.link().clone();
@@ -48,11 +56,10 @@ impl Component for AnimationCanvas {
         let config = Config {
             width: window().unwrap().inner_width().unwrap().as_f64().unwrap() as usize,
             height: window().unwrap().inner_height().unwrap().as_f64().unwrap() as usize,
-            num_particles: 17000,
             avg_lifetime: 100,
-            fg_colour: JsValue::from("#1ce"),
-            bg_colour: JsValue::from("#000"),
-            target_fps: 30.0,
+            fg_colour: JsValue::from(FOREGROUND_COLOUR),
+            bg_colour: JsValue::from(BACKGROUND_COLOUR),
+            target_fps: TARGET_FPS,
             lambda: Box::new(|(x, y)| {
                 let theta = 400.0 / (x * x + y * y).sqrt();
                 let x = x * theta.cos() - y * theta.sin();
@@ -61,14 +68,14 @@ impl Component for AnimationCanvas {
             }),
         };
         Self {
-            last_time_rendered: js_sys::Date::now(),
+            last_render_time: js_sys::Date::now(),
             canvas: NodeRef::default(),
             particles: vec![],
             callback,
             config,
-            fps_history: vec![60.0; 100],
+            fps_history: vec![TARGET_FPS; FPS_HISTORY_SIZE],
+            average_fps: TARGET_FPS,
             frame_count: 0,
-
         }
     }
 
@@ -78,8 +85,8 @@ impl Component for AnimationCanvas {
                 let canvas: HtmlCanvasElement = self.canvas.cast().unwrap();
                 canvas.set_width(self.config.width.try_into().unwrap());
                 canvas.set_height(self.config.height.try_into().unwrap());
-                self.particles = Vec::with_capacity(self.config.num_particles);
-                for _ in 0..self.config.num_particles {
+                self.particles = Vec::with_capacity(STARTING_NUM_PARTICLES);
+                for _ in 0..STARTING_NUM_PARTICLES {
                     self.particles.push(Particle::new(
                         (self.config.width as i32 / -2, self.config.width as i32 / 2),
                         (self.config.height as i32 / -2, self.config.height as i32 / 2),
@@ -92,24 +99,26 @@ impl Component for AnimationCanvas {
             }
             Msg::Render => {
                 let t0 = js_sys::Date::now();
-                let delta = t0 - self.last_time_rendered;
+                let delta = t0 - self.last_render_time;
+
                 self.render(delta);
 
-                if self.frame_count % 25 == 0 {    
-                    let avg_fps = self.fps_history.iter().sum::<f64>() / self.fps_history.len() as f64;
-                    if avg_fps > self.config.target_fps * 1.1 {
-                        self.config.num_particles = (self.config.num_particles as f64*1.05) as usize;
-                        info!(" +FPS: {}    {}", avg_fps as i32, self.config.num_particles);
+                let t1 = js_sys::Date::now();
+                self.last_render_time = t1;
+                let fps = 1000.0 / (t1 - t0);
+                self.fps_history[self.frame_count % FPS_HISTORY_SIZE] = fps;
+                self.frame_count += 1;
 
-                    } else if avg_fps < self.config.target_fps * 0.9 {
-                        self.config.num_particles = (self.config.num_particles as f64*0.95) as usize;
-                        info!("-FPS: {}    {}", avg_fps as i32, self.config.num_particles);
-                    } else {
-                        info!(" FPS: {}    {}", avg_fps as i32, self.config.num_particles);
-                    }
+                if self.frame_count % FPS_HISTORY_SIZE == 0 {
+                    self.average_fps = self.fps_history.iter().sum::<f64>() / self.fps_history.len() as f64;
+                    let max_ratio: f64 = 1.2;
+                    let min_ratio: f64 = 0.8;
+                    let fps_ratio = min_ratio.max(max_ratio.min(self.average_fps / self.config.target_fps));
+                    let target_num_particles = self.particles.len() as f64 * fps_ratio;
+                    info!("FPS: {}    {}", self.average_fps as i32, target_num_particles);
                     
                     self.particles.resize(
-                        self.config.num_particles,
+                        target_num_particles as usize,
                         Particle::new(
                             (self.config.width as i32 / -2, self.config.width as i32 / 2),
                             (self.config.height as i32 / -2, self.config.height as i32 / 2),
@@ -117,14 +126,6 @@ impl Component for AnimationCanvas {
                         ),
                     );
                 }
-
-
-                let t1 = js_sys::Date::now();
-                self.last_time_rendered = t1;
-                let fps = 1000.0 / (t1 - t0);
-                self.fps_history[self.frame_count % 100] = fps;
-                self.frame_count += 1;
-
                 false
             }
         }
@@ -135,7 +136,7 @@ impl Component for AnimationCanvas {
             <div>
                 <canvas
                     id="canvas"
-                    ref={self.canvas.clone()}>
+                    ref={info!("rendered canvas"); self.canvas.clone()}>
                 </canvas>
             </div>
         }
@@ -166,14 +167,15 @@ impl AnimationCanvas {
             .request_animation_frame(self.callback.as_ref().unchecked_ref())
             .unwrap();
     }
-
 }
 
 fn render_particle(config: &Config, particle: &Particle, ctx: &CanvasRenderingContext2d) {
-    let x = particle.pos.0 + config.width as f64 / 2.0;
-    let y = particle.pos.1 + config.height as f64 / 2.0;
+    // shift the particle's position so that the origin is in the center of the canvas
+    let x = particle.pos.0 + (config.width as f64 / 2.0);
+    let y = particle.pos.1 + (config.height as f64 / 2.0);
     ctx.fill_rect(x, y, 1.0, 1.0);
 }
+
 
 #[function_component(App)]
 fn app_body() -> Html {
@@ -185,7 +187,7 @@ fn app_body() -> Html {
 }
 
 #[wasm_bindgen(start)]
-fn main() {
+pub fn main() {
     wasm_logger::init(wasm_logger::Config::default());
     yew::start_app::<App>();
 }
