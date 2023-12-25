@@ -99,8 +99,9 @@ impl Component for AnimationCanvas {
             Msg::Render => {
                 let t0 = js_sys::Date::now();
                 let delta = t0 - self.last_render_time;
-
-                self.render(delta);
+                
+                self.update_particles(delta);
+                self.render();
 
                 let t1 = js_sys::Date::now();
                 self.last_render_time = t1;
@@ -151,22 +152,31 @@ impl Component for AnimationCanvas {
 }
 
 impl AnimationCanvas {
-    fn render(&mut self, delta: f64) {
+    fn update_particles(&mut self, delta: f64) {
+        for particle in self.particles.iter_mut() {
+            if !particle.update(&self.config.lambda, delta) {                
+                particle.respawn();
+            }
+        }
+    }
+
+    fn render(&mut self) {
         let canvas: HtmlCanvasElement = self.canvas.cast().unwrap();
         let ctx: CanvasRenderingContext2d = canvas.get_context("2d").unwrap().unwrap().unchecked_into();
 
+        // put a black square over canvas to fade old particles
         ctx.set_global_alpha(0.01);  // lower values make the trails longer
         ctx.set_fill_style(&self.config.bg_colour);
-        ctx.fill_rect(0.0, 0.0, canvas.width().into(), canvas.height().into());
-        ctx.set_global_alpha(1.0);
+        ctx.fill_rect(0.0, 0.0, self.config.width as f64, self.config.height as f64);
 
+        // render all updated particles
+        ctx.set_global_alpha(1.0);
         ctx.set_fill_style(&self.config.fg_colour);
         for particle in self.particles.iter_mut() {
-            if particle.update(&self.config.lambda, delta) {
-                render_particle(&self.config, particle, &ctx);
-            } else {
-                particle.respawn();
-            }
+            // shift the particle's position so that the origin is in the center of the canvas
+            let x = particle.pos.0 + (self.config.width as f64 / 2.0);
+            let y = particle.pos.1 + (self.config.height as f64 / 2.0);
+            ctx.fill_rect(x, y, 1.0, 1.0);
         }
 
         window()
@@ -176,12 +186,6 @@ impl AnimationCanvas {
     }
 }
 
-fn render_particle(config: &Config, particle: &Particle, ctx: &CanvasRenderingContext2d) {
-    // shift the particle's position so that the origin is in the center of the canvas
-    let x = particle.pos.0 + (config.width as f64 / 2.0);
-    let y = particle.pos.1 + (config.height as f64 / 2.0);
-    ctx.fill_rect(x, y, 1.0, 1.0);
-}
 
 #[function_component(App)]
 fn app_body() -> Html {
