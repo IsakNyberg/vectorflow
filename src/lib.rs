@@ -4,6 +4,10 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 use yew::prelude::*;
 use log::info;
 
+
+mod function_input;
+use function_input::FunctionInput;
+
 mod particle;
 use particle::Particle;
 
@@ -13,6 +17,7 @@ use parser::{interpret_field_function, pretty_print};
 pub enum Msg {
     Init,
     Render,
+    UpdateFunc(String),
 }
 
 const TARGET_FPS: f64 = 64.0;
@@ -37,6 +42,8 @@ struct AnimationCanvas {
     callback: Closure<dyn FnMut()>,
     config: Config,
 
+    func_string: String,
+
     last_render_time: f64,
     fps_history: Vec<f64>,
     average_fps: f64,
@@ -48,13 +55,20 @@ impl Component for AnimationCanvas {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        let function_code = "(
-            x * cos(400/sqrt((x*x+y*y))) - y * sin(400/sqrt((x*x+y*y)))
-            ,
-            x * sin(400/sqrt((x*x+y*y))) + y * cos(400/sqrt((x*x+y*y)))
-        )";
-        let func = interpret_field_function(function_code.to_string());
-        info!("{}", pretty_print(function_code.to_string())); 
+        let func_string = "(
+x*cos(400/sqrt((x*x+y*y))) - y*sin(400/sqrt((x*x+y*y)))
+,
+x*sin(400/sqrt((x*x+y*y))) + y*cos(400/sqrt((x*x+y*y)))
+)";
+        let func = match interpret_field_function(&func_string.to_string()) {
+            Ok(f) => f,
+            Err(e) => {
+                info!("{}", e);
+                info!("Using default function");
+                Box::new(move |(x, y)| (x, y))
+            }
+        };
+        
 
         ctx.link().send_future(async {Msg::Init});
         let comp_ctx = ctx.link().clone();
@@ -73,6 +87,8 @@ impl Component for AnimationCanvas {
             particles: vec![],
             callback: callback,
             config: config,
+
+            func_string: func_string.to_string(),
 
             last_render_time: js_sys::Date::now(),
             fps_history: vec![TARGET_FPS; FPS_HISTORY_SIZE],
@@ -138,13 +154,31 @@ impl Component for AnimationCanvas {
                     false
                 }
             }
+            Msg::UpdateFunc(func_string) => {
+                self.func_string = func_string.clone();
+                match interpret_field_function(&func_string) {
+                    Ok(f) => {
+                        self.config.func = f;
+                        info!("{}", pretty_print(self.func_string.to_string())); 
+                    },
+                    Err(e) => {
+                        info!("{}", e);
+                        info!("Using default function");
+                    }
+                }
+                
+                false
+            }
         }
     }
 
-    fn view(&self, _ctx: &Context<Self>) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let on_change = ctx.link().callback(Msg::UpdateFunc);
+
         html! {
             <div>
-                <div style="position: absolute; top: 0; left: 0; color: white;"> 
+                <div style="position: absolute; color: white;"> 
+                    <FunctionInput {on_change} value={self.func_string.clone()} />
                     {"FPS: "} {self.average_fps as usize } {"    Particles: "} {self.particles.len()}
                 </div>
                 <canvas
@@ -180,7 +214,7 @@ impl AnimationCanvas {
         for particle in self.particles.iter_mut() {
             // shift the particle's position so that the origin is in the center of the canvas
             let x = particle.pos.0 + (self.config.width as f64 / 2.0);
-            let y = particle.pos.1 + (self.config.height as f64 / 2.0);
+            let y = (self.config.height as f64 / 2.0) - particle.pos.1;
             ctx.fill_rect(x, y, 1.0, 1.0);
         }
 
@@ -191,7 +225,6 @@ impl AnimationCanvas {
     }
 }
 
-
 #[function_component(App)]
 fn app_body() -> Html {
     html! {
@@ -200,6 +233,7 @@ fn app_body() -> Html {
         </>
     }
 }
+
 
 #[wasm_bindgen(start)]
 pub fn main() {
