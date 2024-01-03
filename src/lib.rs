@@ -5,18 +5,24 @@ use yew::prelude::*;
 use log::info;
 
 
-mod particle;
+mod function_input;
+use function_input::FunctionInput;
 
+mod particle;
 use particle::Particle;
+
+mod parser;
+use parser::{interpret_field_function, pretty_print};
 
 pub enum Msg {
     Init,
     Render,
+    UpdateFunc(String),
 }
 
 const TARGET_FPS: f64 = 64.0;
 const FPS_HISTORY_SIZE: usize = TARGET_FPS as usize;
-const STARTING_NUM_PARTICLES: usize = 30_000;
+const STARTING_NUM_PARTICLES: usize = 5_000;
 const BACKGROUND_COLOUR: &str = "#000";
 const FOREGROUND_COLOUR: &str = "#1ce";
 
@@ -26,7 +32,7 @@ struct Config {
     avg_lifetime: i32,
     fg_colour: JsValue,
     bg_colour: JsValue,
-    lambda: Box<dyn Fn((f64, f64)) -> (f64, f64)>,
+    func: Box<dyn Fn((f64, f64)) -> (f64, f64)>,
     target_fps: f64,
 }
 
@@ -35,6 +41,8 @@ struct AnimationCanvas {
     particles: Vec<Particle>,
     callback: Closure<dyn FnMut()>,
     config: Config,
+
+    func_string: String,
 
     last_render_time: f64,
     fps_history: Vec<f64>,
@@ -47,6 +55,21 @@ impl Component for AnimationCanvas {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
+        let func_string = "(
+x*cos(400/sqrt((x*x+y*y))) - y*sin(400/sqrt((x*x+y*y)))
+,
+x*sin(400/sqrt((x*x+y*y))) + y*cos(400/sqrt((x*x+y*y)))
+)";
+        let func = match interpret_field_function(&func_string.to_string()) {
+            Ok(f) => f,
+            Err(e) => {
+                info!("{}", e);
+                info!("Using default function");
+                Box::new(move |(x, y)| (x, y))
+            }
+        };
+        
+
         ctx.link().send_future(async {Msg::Init});
         let comp_ctx = ctx.link().clone();
         let callback = Closure::wrap(Box::new(move || comp_ctx.send_message(Msg::Render)) as Box<dyn FnMut()>);
@@ -57,19 +80,17 @@ impl Component for AnimationCanvas {
             fg_colour: JsValue::from(FOREGROUND_COLOUR),
             bg_colour: JsValue::from(BACKGROUND_COLOUR),
             target_fps: TARGET_FPS,
-            lambda: Box::new(|(x, y)| {
-                let theta = 400.0 / (x * x + y * y).sqrt();
-                let x = x * theta.cos() - y * theta.sin();
-                let y = x * theta.sin() + y * theta.cos();
-                (x, y)
-            }),
+            func: func,
         };
         Self {
-            last_render_time: js_sys::Date::now(),
             canvas: NodeRef::default(),
             particles: vec![],
-            callback,
-            config,
+            callback: callback,
+            config: config,
+
+            func_string: func_string.to_string(),
+
+            last_render_time: js_sys::Date::now(),
             fps_history: vec![TARGET_FPS; FPS_HISTORY_SIZE],
             average_fps: TARGET_FPS,
             frame_count: 0,
@@ -99,8 +120,9 @@ impl Component for AnimationCanvas {
             Msg::Render => {
                 let t0 = js_sys::Date::now();
                 let delta = t0 - self.last_render_time;
-
-                self.render(delta);
+                
+                self.update_particles(delta);
+                self.render();
 
                 let t1 = js_sys::Date::now();
                 self.last_render_time = t1;
@@ -110,17 +132,17 @@ impl Component for AnimationCanvas {
 
                 if self.frame_count % FPS_HISTORY_SIZE == 0 {
                     self.average_fps = self.fps_history.iter().sum::<f64>() / self.fps_history.len() as f64;
-                    let max_ratio: f64 = 1.2;
-                    let min_ratio: f64 = 0.8;
+                    let max_ratio: f64 = 1.01;
+                    let min_ratio: f64 = 0.99;
                     let fps_ratio = min_ratio.max(max_ratio.min(self.average_fps / self.config.target_fps));
-                    let target_num_particles = self.particles.len() as f64 * fps_ratio;
-                    info!("FPS: {}    {}", self.average_fps as i32, target_num_particles as i32);
+                    let target_num_particles = (self.particles.len() as f64 * fps_ratio) as usize;
+                    info!("FPS: {}    {}", self.average_fps as i32, target_num_particles);
                     
 
                     let w = self.config.width as i32;
                     let h = self.config.height as i32;
                     self.particles.resize(
-                        target_num_particles as usize,
+                        target_num_particles,
                         Particle::new(
                             (-w, w),
                             (-h, h),
@@ -132,13 +154,31 @@ impl Component for AnimationCanvas {
                     false
                 }
             }
+            Msg::UpdateFunc(func_string) => {
+                self.func_string = func_string.clone();
+                match interpret_field_function(&func_string) {
+                    Ok(f) => {
+                        self.config.func = f;
+                        info!("{}", pretty_print(self.func_string.to_string())); 
+                    },
+                    Err(e) => {
+                        info!("{}", e);
+                        info!("Using default function");
+                    }
+                }
+                
+                false
+            }
         }
     }
 
-    fn view(&self, _ctx: &Context<Self>) -> Html {
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let on_change = ctx.link().callback(Msg::UpdateFunc);
+
         html! {
             <div>
-                <div style="position: absolute; top: 0; left: 0; color: white;"> 
+                <div style="position: absolute; color: white;"> 
+                    <FunctionInput {on_change} value={self.func_string.clone()} />
                     {"FPS: "} {self.average_fps as usize } {"    Particles: "} {self.particles.len()}
                 </div>
                 <canvas
@@ -151,22 +191,31 @@ impl Component for AnimationCanvas {
 }
 
 impl AnimationCanvas {
-    fn render(&mut self, delta: f64) {
+    fn update_particles(&mut self, delta: f64) {
+        for particle in self.particles.iter_mut() {
+            if !particle.update(&self.config.func, delta) { 
+                particle.respawn();
+            }
+        }
+    }
+
+    fn render(&mut self) {
         let canvas: HtmlCanvasElement = self.canvas.cast().unwrap();
         let ctx: CanvasRenderingContext2d = canvas.get_context("2d").unwrap().unwrap().unchecked_into();
 
+        // put a black square over canvas to fade old particles
         ctx.set_global_alpha(0.01);  // lower values make the trails longer
         ctx.set_fill_style(&self.config.bg_colour);
-        ctx.fill_rect(0.0, 0.0, canvas.width().into(), canvas.height().into());
-        ctx.set_global_alpha(1.0);
+        ctx.fill_rect(0.0, 0.0, self.config.width as f64, self.config.height as f64);
 
+        // render all updated particles
+        ctx.set_global_alpha(1.0);
         ctx.set_fill_style(&self.config.fg_colour);
         for particle in self.particles.iter_mut() {
-            if particle.update(&self.config.lambda, delta) {
-                render_particle(&self.config, particle, &ctx);
-            } else {
-                particle.respawn();
-            }
+            // shift the particle's position so that the origin is in the center of the canvas
+            let x = particle.pos.0 + (self.config.width as f64 / 2.0);
+            let y = (self.config.height as f64 / 2.0) - particle.pos.1;
+            ctx.fill_rect(x, y, 1.0, 1.0);
         }
 
         window()
@@ -174,13 +223,6 @@ impl AnimationCanvas {
             .request_animation_frame(self.callback.as_ref().unchecked_ref())
             .unwrap();
     }
-}
-
-fn render_particle(config: &Config, particle: &Particle, ctx: &CanvasRenderingContext2d) {
-    // shift the particle's position so that the origin is in the center of the canvas
-    let x = particle.pos.0 + (config.width as f64 / 2.0);
-    let y = particle.pos.1 + (config.height as f64 / 2.0);
-    ctx.fill_rect(x, y, 1.0, 1.0);
 }
 
 #[function_component(App)]
@@ -191,6 +233,7 @@ fn app_body() -> Html {
         </>
     }
 }
+
 
 #[wasm_bindgen(start)]
 pub fn main() {
