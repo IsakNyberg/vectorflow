@@ -4,10 +4,11 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 use yew::prelude::*;
 use log::info;
 
-
 mod particle;
-
 use particle::Particle;
+
+mod parser;
+use parser::{interpret_field_function, pretty_print};
 
 pub enum Msg {
     Init,
@@ -16,7 +17,7 @@ pub enum Msg {
 
 const TARGET_FPS: f64 = 64.0;
 const FPS_HISTORY_SIZE: usize = TARGET_FPS as usize;
-const STARTING_NUM_PARTICLES: usize = 30_000;
+const STARTING_NUM_PARTICLES: usize = 5_000;
 const BACKGROUND_COLOUR: &str = "#000";
 const FOREGROUND_COLOUR: &str = "#1ce";
 
@@ -26,7 +27,7 @@ struct Config {
     avg_lifetime: i32,
     fg_colour: JsValue,
     bg_colour: JsValue,
-    lambda: Box<dyn Fn((f64, f64)) -> (f64, f64)>,
+    func: Box<dyn Fn((f64, f64)) -> (f64, f64)>,
     target_fps: f64,
 }
 
@@ -47,6 +48,14 @@ impl Component for AnimationCanvas {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
+        let function_code = "(
+            x * cos(400/sqrt((x*x+y*y))) - y * sin(400/sqrt((x*x+y*y)))
+            ,
+            x * sin(400/sqrt((x*x+y*y))) + y * cos(400/sqrt((x*x+y*y)))
+        )";
+        let func = interpret_field_function(function_code.to_string());
+        info!("{}", pretty_print(function_code.to_string())); 
+
         ctx.link().send_future(async {Msg::Init});
         let comp_ctx = ctx.link().clone();
         let callback = Closure::wrap(Box::new(move || comp_ctx.send_message(Msg::Render)) as Box<dyn FnMut()>);
@@ -57,19 +66,15 @@ impl Component for AnimationCanvas {
             fg_colour: JsValue::from(FOREGROUND_COLOUR),
             bg_colour: JsValue::from(BACKGROUND_COLOUR),
             target_fps: TARGET_FPS,
-            lambda: Box::new(|(x, y)| {
-                let theta = 400.0 / (x * x + y * y).sqrt();
-                let x = x * theta.cos() - y * theta.sin();
-                let y = x * theta.sin() + y * theta.cos();
-                (x, y)
-            }),
+            func: func,
         };
         Self {
-            last_render_time: js_sys::Date::now(),
             canvas: NodeRef::default(),
             particles: vec![],
-            callback,
-            config,
+            callback: callback,
+            config: config,
+
+            last_render_time: js_sys::Date::now(),
             fps_history: vec![TARGET_FPS; FPS_HISTORY_SIZE],
             average_fps: TARGET_FPS,
             frame_count: 0,
@@ -111,17 +116,17 @@ impl Component for AnimationCanvas {
 
                 if self.frame_count % FPS_HISTORY_SIZE == 0 {
                     self.average_fps = self.fps_history.iter().sum::<f64>() / self.fps_history.len() as f64;
-                    let max_ratio: f64 = 1.2;
-                    let min_ratio: f64 = 0.8;
+                    let max_ratio: f64 = 1.01;
+                    let min_ratio: f64 = 0.99;
                     let fps_ratio = min_ratio.max(max_ratio.min(self.average_fps / self.config.target_fps));
-                    let target_num_particles = self.particles.len() as f64 * fps_ratio;
-                    info!("FPS: {}    {}", self.average_fps as i32, target_num_particles as i32);
+                    let target_num_particles = (self.particles.len() as f64 * fps_ratio) as usize;
+                    info!("FPS: {}    {}", self.average_fps as i32, target_num_particles);
                     
 
                     let w = self.config.width as i32;
                     let h = self.config.height as i32;
                     self.particles.resize(
-                        target_num_particles as usize,
+                        target_num_particles,
                         Particle::new(
                             (-w, w),
                             (-h, h),
@@ -154,7 +159,7 @@ impl Component for AnimationCanvas {
 impl AnimationCanvas {
     fn update_particles(&mut self, delta: f64) {
         for particle in self.particles.iter_mut() {
-            if !particle.update(&self.config.lambda, delta) {                
+            if !particle.update(&self.config.func, delta) { 
                 particle.respawn();
             }
         }

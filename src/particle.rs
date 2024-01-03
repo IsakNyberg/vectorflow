@@ -26,7 +26,7 @@ impl Particle {
         }
     }
 
-    pub fn update(&mut self, lambda: &dyn Fn((f64, f64)) -> (f64, f64), delta: f64) -> bool {
+    pub fn update(&mut self, lambda: &Box<dyn Fn((f64, f64)) -> (f64, f64)>, delta: f64) -> bool {
         self.tick += 1;
         self.velocity = lambda(self.pos);
 
