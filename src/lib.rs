@@ -22,9 +22,14 @@ pub enum Msg {
 
 const TARGET_FPS: f64 = 64.0;
 const FPS_HISTORY_SIZE: usize = TARGET_FPS as usize;
-const STARTING_NUM_PARTICLES: usize = 5_000;
+const STARTING_NUM_PARTICLES: usize = 9_000;
 const BACKGROUND_COLOUR: &str = "#000";
 const FOREGROUND_COLOUR: &str = "#1ce";
+const DEFAULT_FUNCTION: &str = "(
+-x*tan(1000/sqrt((x*x+y*y)))
+,
+y*tan(1000/sqrt((x*x+y*y)))
+)";
 
 struct Config {
     width: usize,
@@ -55,12 +60,7 @@ impl Component for AnimationCanvas {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        let func_string = "(
-x*cos(400/sqrt((x*x+y*y))) - y*sin(400/sqrt((x*x+y*y)))
-,
-x*sin(400/sqrt((x*x+y*y))) + y*cos(400/sqrt((x*x+y*y)))
-)";
-        let func = match interpret_field_function(&func_string.to_string()) {
+        let func = match interpret_field_function(&DEFAULT_FUNCTION.to_string()) {
             Ok(f) => f,
             Err(e) => {
                 info!("{}", e);
@@ -76,7 +76,7 @@ x*sin(400/sqrt((x*x+y*y))) + y*cos(400/sqrt((x*x+y*y)))
         let config = Config {
             width: window().unwrap().inner_width().unwrap().as_f64().unwrap() as usize,
             height: window().unwrap().inner_height().unwrap().as_f64().unwrap() as usize,
-            avg_lifetime: 100,
+            avg_lifetime: 500,
             fg_colour: JsValue::from(FOREGROUND_COLOUR),
             bg_colour: JsValue::from(BACKGROUND_COLOUR),
             target_fps: TARGET_FPS,
@@ -88,7 +88,7 @@ x*sin(400/sqrt((x*x+y*y))) + y*cos(400/sqrt((x*x+y*y)))
             callback: callback,
             config: config,
 
-            func_string: func_string.to_string(),
+            func_string: DEFAULT_FUNCTION.to_string(),
 
             last_render_time: js_sys::Date::now(),
             fps_history: vec![TARGET_FPS; FPS_HISTORY_SIZE],
@@ -132,8 +132,8 @@ x*sin(400/sqrt((x*x+y*y))) + y*cos(400/sqrt((x*x+y*y)))
 
                 if self.frame_count % FPS_HISTORY_SIZE == 0 {
                     self.average_fps = self.fps_history.iter().sum::<f64>() / self.fps_history.len() as f64;
-                    let max_ratio: f64 = 1.01;
-                    let min_ratio: f64 = 0.99;
+                    let max_ratio: f64 = 1.02;
+                    let min_ratio: f64 = 0.98;
                     let fps_ratio = min_ratio.max(max_ratio.min(self.average_fps / self.config.target_fps));
                     let target_num_particles = (self.particles.len() as f64 * fps_ratio) as usize;
                     info!("FPS: {}    {}", self.average_fps as i32, target_num_particles);
