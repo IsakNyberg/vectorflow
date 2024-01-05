@@ -34,12 +34,28 @@ enum Expression {
     Pow(Box<Expression>, Box<Expression>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 enum Token {
     Operator(char),
     Number(f64),
     Const(String),
     Variable(Var),
+}
+
+impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+           Token::Operator(c) => write!(f, "{}", c),
+           Token::Number(n) => write!(f, "{}", n),
+           Token::Const(s) => write!(f, "{}", s),
+           Token::Variable(v) => {
+                match v {
+                     Var::X => write!(f, "x"),
+                     Var::Y => write!(f, "y"),
+                }
+           }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -88,7 +104,7 @@ fn lex_token_string(token_string: String) -> Result<Token, String> {
             let num = n.parse::<f64>();
             match num {
                 Ok(n) => Ok(Token::Number(n)),
-                Err(e) => Err(format!("could not parse number {}: {}",n , e)),
+                Err(_) => Err(format!("could not parse '{}'",n)),
             }
         },
     }
@@ -102,26 +118,29 @@ fn field_function_parser(tokens_iter: impl Iterator<Item = Token>) -> Result<Fun
     // remove opening bracket    
     match tokens_iter.next() {
         Some(Token::Operator('(')) => {}
-        _ => return Err("expected '('".to_string()),
+        Some(e) => return Err(format!("in fn len expected '(' not '{}'", e)),
+        None => return Err(format!("in fn len expected '(' not end of input")),
     }
 
     // parse left hand side and then expect a comma
     let x = prase_add_sub(&mut tokens_iter)?;
     match tokens_iter.next() {
         Some(Token::Operator(',')) => {}
-        _ => return Err("expected ','".to_string()),
+        Some(e) => return Err(format!("in fn len expected ',' not '{}'", e)),
+        None => return Err(format!("in fn len expected ',' not end of input")),
     }
 
     // parse right hand side and then expect a closing bracket
     let y = prase_add_sub(&mut tokens_iter)?;
     match tokens_iter.next() {
         Some(Token::Operator(')')) => {}
-        _ => return Err("expected ')'".to_string()),
+        Some(e) => return Err(format!("in fn len expected ')' not '{}'", e)),
+        None => return Err(format!("in fn len expected ')' not end of input")),
     }
     
     match tokens_iter.next() {
         None => {}
-        Some(token) => return Err(format!("expected end of input, got {:?}", token)),
+        Some(token) => return Err(format!("expected end of input, got {:}", token)),
     }
 
     Ok(Function::V(Box::new(x), Box::new(y)))
@@ -134,7 +153,7 @@ fn parser(tokens_iter: impl Iterator<Item = Token>) -> Result<Function, String> 
 
     match tokens_iter.next() {
         None => {}
-        _ => return Err("expected end of input".to_string()),
+        Some(token) => return Err(format!("expected end of input, got {:}", token)),
     }
 
     Ok(Function::S(Box::new(f)))
@@ -225,7 +244,7 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
             if let Some(Token::Operator(')')) = tokens.next() {
                 Ok(Expression::Brackets(Box::new(inside)))
             } else {
-                Err("expected ')'".to_string())
+                Err(format!("expected ')' not '{}'" , tokens.next().unwrap()))
             }
         }
         Some(Token::Operator('l')) => {
@@ -236,18 +255,19 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
             if let Some(Token::Operator('(')) = tokens.next() {
                 x = prase_add_sub(tokens)?;
             } else {
-                return Err("in fn len expected '('".to_string())
+                return Err(format!("in fn len expected '(' not '{}'", tokens.next().unwrap()));
             }
             // expect a ','
             if let Some(Token::Operator(',')) = tokens.next() {
                 y = prase_add_sub(tokens)?;
             } else {
-                return Err("in fn len expected ','".to_string())
+                return Err(format!("in fn len expected ',' not '{}'", tokens.next().unwrap()));
             }
             // expect a ')'
             match tokens.next() {
                 Some(Token::Operator(')')) => Ok(Expression::Len(Box::new(x), Box::new(y))),
-                _ => Err("in fn len expected ')'".to_string()),
+                Some(e) => Err(format!("in fn len expected ')' not '{}'", e)),
+                None => Err(format!("in fn len expected ')' not end of input")),
             }
         }
         Some(Token::Operator('-')) => {
@@ -298,7 +318,8 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
         }
         Some(Token::Operator(c)) => Err(format!("expected number or '(', not Operator '{}'", c)),
 
-        e => Err(format!("expected number or '(', not '{:?}'", e)),
+        None => Err(format!("expected number or '(', not end of input")),
+
     }
 }
 
@@ -493,7 +514,6 @@ fn main() {
         // tokenize 
         let tokens = lexer(&input.to_string()).unwrap();
         // parse
-        println!("{:?}", tokens);
         let fun = parser(tokens.into_iter());
         let expression = match fun.unwrap() {
             Function::S(exp) => *exp,
