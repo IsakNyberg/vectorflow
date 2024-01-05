@@ -20,17 +20,16 @@ pub enum Msg {
     UpdateFunc(String),
 }
 
-const TARGET_FPS: f64 = 64.0;
-const FPS_HISTORY_SIZE: usize = TARGET_FPS as usize;
-const STARTING_NUM_PARTICLES: usize = 9_000;
+const TARGET_FPS: f64 = 32.0;  // never set this higher than 60
+const FPS_UPDATE_PERIOD: f64 = 500.0;
+const STARTING_NUM_PARTICLES: usize = 10_000;
 const BACKGROUND_COLOUR: &str = "#000";
 const FOREGROUND_COLOUR: &str = "#1ce";
 const DEFAULT_FUNCTION: &str = "(
--x*tan(1000/sqrt((x*x+y*y)))
+200*abs(cos(len(x, y)/25))
 ,
-y*tan(1000/sqrt((x*x+y*y)))
+200*sin(len(x, y)/25)
 )";
-
 struct Config {
     width: usize,
     height: usize,
@@ -48,9 +47,9 @@ struct AnimationCanvas {
     config: Config,
 
     func_string: String,
+    func_error_message: String,
 
-    last_render_time: f64,
-    fps_history: Vec<f64>,
+    time_delta: f64,
     average_fps: f64,
     frame_count: usize,
 }
@@ -60,23 +59,16 @@ impl Component for AnimationCanvas {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        let func = match interpret_field_function(&DEFAULT_FUNCTION.to_string()) {
-            Ok(f) => f,
-            Err(e) => {
-                info!("{}", e);
-                info!("Using default function");
-                Box::new(move |(x, y)| (x, y))
-            }
-        };
+        let func = interpret_field_function(&DEFAULT_FUNCTION.to_string()).unwrap();
         
 
         ctx.link().send_future(async {Msg::Init});
         let comp_ctx = ctx.link().clone();
         let callback = Closure::wrap(Box::new(move || comp_ctx.send_message(Msg::Render)) as Box<dyn FnMut()>);
         let config = Config {
-            width: window().unwrap().inner_width().unwrap().as_f64().unwrap() as usize,
-            height: window().unwrap().inner_height().unwrap().as_f64().unwrap() as usize,
-            avg_lifetime: 500,
+            width: window().unwrap().inner_width().unwrap().as_f64().unwrap() as usize + 100,
+            height: window().unwrap().inner_height().unwrap().as_f64().unwrap() as usize + 100,
+            avg_lifetime: 200,
             fg_colour: JsValue::from(FOREGROUND_COLOUR),
             bg_colour: JsValue::from(BACKGROUND_COLOUR),
             target_fps: TARGET_FPS,
@@ -89,9 +81,9 @@ impl Component for AnimationCanvas {
             config: config,
 
             func_string: DEFAULT_FUNCTION.to_string(),
+            func_error_message: "".to_string(),
 
-            last_render_time: js_sys::Date::now(),
-            fps_history: vec![TARGET_FPS; FPS_HISTORY_SIZE],
+            time_delta: js_sys::Date::now(),
             average_fps: TARGET_FPS,
             frame_count: 0,
         }
@@ -118,27 +110,22 @@ impl Component for AnimationCanvas {
                 true
             }
             Msg::Render => {
-                let t0 = js_sys::Date::now();
-                let delta = t0 - self.last_render_time;
+                let delta = 1000.0 / self.average_fps;
                 
                 self.update_particles(delta);
                 self.render();
-
-                let t1 = js_sys::Date::now();
-                self.last_render_time = t1;
-                let fps = 1000.0 / (t1 - t0);
-                self.fps_history[self.frame_count % FPS_HISTORY_SIZE] = fps;
                 self.frame_count += 1;
 
-                if self.frame_count % FPS_HISTORY_SIZE == 0 {
-                    self.average_fps = self.fps_history.iter().sum::<f64>() / self.fps_history.len() as f64;
-                    let max_ratio: f64 = 1.02;
-                    let min_ratio: f64 = 0.98;
-                    let fps_ratio = min_ratio.max(max_ratio.min(self.average_fps / self.config.target_fps));
-                    let target_num_particles = (self.particles.len() as f64 * fps_ratio) as usize;
-                    info!("FPS: {}    {}", self.average_fps as i32, target_num_particles);
-                    
+                let time = js_sys::Date::now();
+                if time - self.time_delta > FPS_UPDATE_PERIOD {
+                    self.time_delta = time;
+                    self.average_fps = 1000.0 * self.frame_count as f64 / FPS_UPDATE_PERIOD;
+                    self.frame_count = 0;
 
+                    let fps_ratio = (self.average_fps / self.config.target_fps).max(0.99).min(1.01);
+                    let target_num_particles = (self.particles.len() as f64 * fps_ratio) as usize;
+                    info!("FPS: {}   {}", self.average_fps as i32, target_num_particles);
+                    
                     let w = self.config.width as i32;
                     let h = self.config.height as i32;
                     self.particles.resize(
@@ -159,11 +146,12 @@ impl Component for AnimationCanvas {
                 match interpret_field_function(&func_string) {
                     Ok(f) => {
                         self.config.func = f;
+                        self.func_error_message = "".to_string();
                         info!("{}", pretty_print(self.func_string.to_string())); 
                     },
                     Err(e) => {
                         info!("{}", e);
-                        info!("Using default function");
+                        self.func_error_message = e;
                     }
                 }
                 
@@ -175,14 +163,24 @@ impl Component for AnimationCanvas {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let on_change = ctx.link().callback(Msg::UpdateFunc);
 
+        let func_error_message_html = if self.func_error_message.len() > 0 {
+            html! {
+                <div class="error-message">{self.func_error_message.clone()}</div>
+            }
+        } else {
+            html! {}
+        };
+
         html! {
             <div>
-                <div style="position: absolute; color: white;"> 
+                <div style="position: absolute; color: #1ce;"> 
                     <FunctionInput {on_change} value={self.func_string.clone()} />
-                    {"FPS: "} {self.average_fps as usize } {"    Particles: "} {self.particles.len()}
+                    {func_error_message_html}
+                    <div> {"FPS: "} {self.average_fps as usize } {"    Particles: "} {self.particles.len()} </div>
                 </div>
                 <canvas
                     id="canvas"
+                    class="canvas"
                     ref={self.canvas.clone()}>
                 </canvas>
             </div>
