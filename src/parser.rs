@@ -28,7 +28,10 @@ enum Expression {
     Sin(Box<Expression>),
     Cos(Box<Expression>),
     Tan(Box<Expression>),
+    Abs(Box<Expression>),
     Sqrt(Box<Expression>),
+    Len(Box<Expression>, Box<Expression>),
+    Pow(Box<Expression>, Box<Expression>),
 }
 
 #[derive(Debug, Clone)]
@@ -51,7 +54,7 @@ fn lexer(input: &String) -> Result<Vec<Token>, String> {
     let mut token_string = String::new();
     for c in input.chars() {
         match c {
-            '+' | '-' | '*' | '/' | '(' | ')' | ',' => {
+            '+' | '-' | '*' | '/' | '(' | ')' | ',' | '^' => {
                 if !token_string.is_empty() {
                     tokens.push(lex_token_string(token_string)?);
                     token_string = String::new();
@@ -70,7 +73,6 @@ fn lexer(input: &String) -> Result<Vec<Token>, String> {
 }
 
 fn lex_token_string(token_string: String) -> Result<Token, String> {
-    println!("token: {:?}",token_string);
     match token_string.as_str() {
         "pi" | "e" => Ok(Token::Const(token_string)),
         "x" => Ok(Token::Variable(Var::X)),
@@ -79,6 +81,8 @@ fn lex_token_string(token_string: String) -> Result<Token, String> {
         "cos" => Ok(Token::Operator('c')),
         "tan" => Ok(Token::Operator('t')),
         "sqrt" => Ok(Token::Operator('q')),
+        "abs" => Ok(Token::Operator('a')),
+        "len" => Ok(Token::Operator('l')),
         
         n => {
             let num = n.parse::<f64>();
@@ -114,22 +118,26 @@ fn field_function_parser(tokens_iter: impl Iterator<Item = Token>) -> Result<Fun
         Some(Token::Operator(')')) => {}
         _ => return Err("expected ')'".to_string()),
     }
-
-    // expect end of input
+    
     match tokens_iter.next() {
         None => {}
-        _ => return Err("expected end of input".to_string()),
+        Some(token) => return Err(format!("expected end of input, got {:?}", token)),
     }
 
     Ok(Function::V(Box::new(x), Box::new(y)))
 }
 
+
 fn parser(tokens_iter: impl Iterator<Item = Token>) -> Result<Function, String> {
     let mut tokens_iter = tokens_iter.peekable();
-    match prase_add_sub(&mut tokens_iter) {
-        Ok(exp) => Ok(Function::S(Box::new(exp))),
-        Err(e) => Err(e),
+    let f =  prase_add_sub(&mut tokens_iter)?;
+
+    match tokens_iter.next() {
+        None => {}
+        _ => return Err("expected end of input".to_string()),
     }
+
+    Ok(Function::S(Box::new(f)))
 }
 
 
@@ -156,20 +164,40 @@ fn prase_add_sub(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<E
 
 fn parse_mult_div(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<Expression, String> {
     // first go as deep into the recursion as possible
-    let mut lhs = parse_num_bracket(tokens)?;
+    let mut lhs = parse_function(tokens)?;
 
     loop {
         // while we can still see a '*' or '/' operator (with numbers in between)
         match tokens.peek() {
             Some(Token::Operator('*')) => {
                 tokens.next();
-                let rhs = parse_num_bracket(tokens)?;
+                let rhs = parse_function(tokens)?;
                 lhs = Expression::Mult(Box::new(lhs), Box::new(rhs));
             }
             Some(Token::Operator('/')) => {
                 tokens.next();
-                let rhs = parse_num_bracket(tokens)?;
+                let rhs = parse_function(tokens)?;
                 lhs = Expression::Div(Box::new(lhs), Box::new(rhs));
+            }
+            // we see anything else we break and move up in recursion layers
+            _ => break,
+        }
+    }
+    Ok(lhs)
+}
+
+
+fn parse_function(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<Expression, String> {
+    // first go as deep into the recursion as possible
+    let mut lhs = parse_num_bracket(tokens)?;
+
+    loop {
+        // while we can still see a '^' operator (with numbers in between)
+        match tokens.peek() {
+            Some(Token::Operator('^')) => {
+                tokens.next();
+                let rhs = parse_num_bracket(tokens)?;
+                lhs = Expression::Pow(Box::new(lhs), Box::new(rhs));
             }
             // we see anything else we break and move up in recursion layers
             _ => break,
@@ -200,6 +228,28 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
                 Err("expected ')'".to_string())
             }
         }
+        Some(Token::Operator('l')) => {
+            tokens.next();
+            // expect a '('
+            let x: Expression;
+            let y: Expression;
+            if let Some(Token::Operator('(')) = tokens.next() {
+                x = prase_add_sub(tokens)?;
+            } else {
+                return Err("in fn len expected '('".to_string())
+            }
+            // expect a ','
+            if let Some(Token::Operator(',')) = tokens.next() {
+                y = prase_add_sub(tokens)?;
+            } else {
+                return Err("in fn len expected ','".to_string())
+            }
+            // expect a ')'
+            match tokens.next() {
+                Some(Token::Operator(')')) => Ok(Expression::Len(Box::new(x), Box::new(y))),
+                _ => Err("in fn len expected ')'".to_string()),
+            }
+        }
         Some(Token::Operator('-')) => {
             // unary minus
             tokens.next();
@@ -222,6 +272,11 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
             let inside = parse_num_bracket(tokens)?;
             Ok(Expression::Tan(Box::new(inside)))
         }
+        Some(Token::Operator('a')) => {
+            tokens.next();
+            let inside = parse_num_bracket(tokens)?;
+            Ok(Expression::Abs(Box::new(inside)))
+        }
         Some(Token::Operator('q')) => {
             tokens.next();
             let inside = parse_num_bracket(tokens)?;
@@ -241,7 +296,7 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
             tokens.next();
             Ok(Expression::Variable(var))
         }
-        Some(Token::Operator(c)) => Err(format!("expected number or '(', not '{}'", c)),
+        Some(Token::Operator(c)) => Err(format!("expected number or '(', not Operator '{}'", c)),
 
         e => Err(format!("expected number or '(', not '{:?}'", e)),
     }
@@ -251,10 +306,10 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
 
 fn expression_to_str(exp: &Expression) -> String { 
     match exp {
-        Expression::Add(a, b) => format!("({} + {})", expression_to_str(a), expression_to_str(b)),
-        Expression::Sub(a, b) => format!("({} - {})", expression_to_str(a), expression_to_str(b)),
-        Expression::Mult(a, b) => format!("({} * {})", expression_to_str(a), expression_to_str(b)),
-        Expression::Div(a, b) => format!("({} / {})", expression_to_str(a), expression_to_str(b)),
+        Expression::Add(a, b) => format!("{} + {}", expression_to_str(a), expression_to_str(b)),
+        Expression::Sub(a, b) => format!("{} - {}", expression_to_str(a), expression_to_str(b)),
+        Expression::Mult(a, b) => format!("{} * {}", expression_to_str(a), expression_to_str(b)),
+        Expression::Div(a, b) => format!("{} / {}", expression_to_str(a), expression_to_str(b)),
         Expression::Number(n) => n.to_string(),
         Expression::Brackets(a) => format!("({})", expression_to_str(a)),
         Expression::Variable(s) => format!("{:?}", s),
@@ -262,7 +317,10 @@ fn expression_to_str(exp: &Expression) -> String {
         Expression::Cos(a) => format!("cos{}", expression_to_str(a)),
         Expression::Tan(a) => format!("tan{}", expression_to_str(a)),
         Expression::Sqrt(a) => format!("sqrt{}", expression_to_str(a)),
+        Expression::Abs(a) => format!("abs{}", expression_to_str(a)),
         Expression::Neg(a) => format!("-{}", expression_to_str(a)),
+        Expression::Len(a, b) => format!("len({}, {})", expression_to_str(a), expression_to_str(b)),
+        Expression::Pow(a, b) => format!("{}^{}", expression_to_str(a), expression_to_str(b)),
     }
 }
 
@@ -289,6 +347,20 @@ fn evaluate(exp: Expression) -> Box<dyn Fn((f64, f64)) -> f64> {
             let eval_b = evaluate(*b);
             Box::new(move |(x, y)| eval_a((x, y)) / eval_b((x, y)))
         }
+        Expression::Pow(a, b) => {
+            let eval_a = evaluate(*a);
+            let eval_b = evaluate(*b);
+            Box::new(move |(x, y)| f64::powf(eval_a((x, y)), eval_b((x, y)))) 
+        }
+        Expression::Len(a, b) => {
+            let eval_a = evaluate(*a);
+            let eval_b = evaluate(*b);
+            Box::new(move |(x, y)| {
+                let dx = eval_a((x, y));
+                let dy = eval_b((x, y));
+                f64::sqrt(dx*dx + dy*dy)
+            })
+        }
         Expression::Neg(a) => {
             let eval_a = evaluate(*a);
             Box::new(move |(x, y)| -eval_a((x, y)))
@@ -296,6 +368,10 @@ fn evaluate(exp: Expression) -> Box<dyn Fn((f64, f64)) -> f64> {
         Expression::Sin(a) => {
             let eval_a = evaluate(*a);
             Box::new(move |(x, y)| eval_a((x, y)).sin())
+        }
+        Expression::Abs(a) => {
+            let eval_a = evaluate(*a);
+            Box::new(move |(x, y)| f64::abs(eval_a((x, y))))
         }
         Expression::Cos(a) => {
             let eval_a = evaluate(*a);
@@ -365,6 +441,37 @@ pub fn interpret_field_function(input: &String) -> Result<Box<dyn Fn((f64, f64))
     }
 }
 
+#[test]
+fn test_all() {
+    let x = 3.0;
+    let y = 4.0;
+    let arg = (x, y);
+    assert_eq!(interpret("5".to_string()).unwrap()(arg), 5.0);
+    assert_eq!(interpret("-5".to_string()).unwrap()(arg), -5.0);
+    assert_eq!(interpret("x+y".to_string()).unwrap()(arg), x+y);
+    assert_eq!(interpret("x*y".to_string()).unwrap()(arg), x*y);
+    assert_eq!(interpret("x/y".to_string()).unwrap()(arg), x / y);
+    assert_eq!(interpret("x/(y+x)".to_string()).unwrap()(arg), x / (y+x));
+    assert_eq!(interpret("x^y".to_string()).unwrap()(arg), x.powf(y));
+    assert_eq!(interpret("abs(x)".to_string()).unwrap()(arg), x.abs());
+    assert_eq!(interpret("sin(x)".to_string()).unwrap()(arg), x.sin());
+    assert_eq!(interpret("tan(x)".to_string()).unwrap()(arg), x.tan());
+    assert_eq!(interpret("sqrt(x)".to_string()).unwrap()(arg), x.sqrt());
+    assert_eq!(interpret("len(x, y)".to_string()).unwrap()(arg), (x*x+y*y).sqrt());
+
+    // Combinations of functions
+    assert_eq!(interpret("abs(x) + sin(y)".to_string()).unwrap()(arg), x.abs() + y.sin());
+    assert_eq!(interpret("x*y - sqrt(x)".to_string()).unwrap()(arg), x * y - x.sqrt());
+    assert_eq!(interpret("tan(x) * cos(y)".to_string()).unwrap()(arg), x.tan() * y.cos());
+    assert_eq!(interpret("x / (y * 2)".to_string()).unwrap()(arg), x / (y * 2.0));
+    assert_eq!(interpret("sin(x) + cos(x)".to_string()).unwrap()(arg), x.sin() + x.cos());
+    assert_eq!(interpret("x^2 + y^2".to_string()).unwrap()(arg), x.powf(2.0) + y.powf(2.0));
+    assert_eq!(interpret("x + y * 2".to_string()).unwrap()(arg), x + y * 2.0);
+    assert_eq!(interpret("sqrt(x + y)".to_string()).unwrap()(arg), (x + y).sqrt());
+    assert_eq!(interpret("len(x, y) / 2".to_string()).unwrap()(arg), (x * x + y * y).sqrt() / 2.0);
+}
+
+#[test]
 fn main() {
     // read from stdin
     println!("X=");

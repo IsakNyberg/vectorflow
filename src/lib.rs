@@ -26,11 +26,9 @@ const STARTING_NUM_PARTICLES: usize = 9_000;
 const BACKGROUND_COLOUR: &str = "#000";
 const FOREGROUND_COLOUR: &str = "#1ce";
 const DEFAULT_FUNCTION: &str = "(
--x*tan(1000/sqrt((x*x+y*y)))
-,
-y*tan(1000/sqrt((x*x+y*y)))
+200*abs(cos(len(x, y)/25)),
+200*sin(len(x, y)/25)
 )";
-
 struct Config {
     width: usize,
     height: usize,
@@ -74,9 +72,9 @@ impl Component for AnimationCanvas {
         let comp_ctx = ctx.link().clone();
         let callback = Closure::wrap(Box::new(move || comp_ctx.send_message(Msg::Render)) as Box<dyn FnMut()>);
         let config = Config {
-            width: window().unwrap().inner_width().unwrap().as_f64().unwrap() as usize,
-            height: window().unwrap().inner_height().unwrap().as_f64().unwrap() as usize,
-            avg_lifetime: 500,
+            width: window().unwrap().inner_width().unwrap().as_f64().unwrap() as usize + 100,
+            height: window().unwrap().inner_height().unwrap().as_f64().unwrap() as usize + 100,
+            avg_lifetime: 200,
             fg_colour: JsValue::from(FOREGROUND_COLOUR),
             bg_colour: JsValue::from(BACKGROUND_COLOUR),
             target_fps: TARGET_FPS,
@@ -132,9 +130,7 @@ impl Component for AnimationCanvas {
 
                 if self.frame_count % FPS_HISTORY_SIZE == 0 {
                     self.average_fps = self.fps_history.iter().sum::<f64>() / self.fps_history.len() as f64;
-                    let max_ratio: f64 = 1.02;
-                    let min_ratio: f64 = 0.98;
-                    let fps_ratio = min_ratio.max(max_ratio.min(self.average_fps / self.config.target_fps));
+                    let fps_ratio = (self.average_fps / self.config.target_fps).max(0.95).min(1.05);
                     let target_num_particles = (self.particles.len() as f64 * fps_ratio) as usize;
                     info!("FPS: {}    {}", self.average_fps as i32, target_num_particles);
                     
@@ -177,12 +173,13 @@ impl Component for AnimationCanvas {
 
         html! {
             <div>
-                <div style="position: absolute; color: white;"> 
+                <div style="position: absolute; color: #1ce;"> 
                     <FunctionInput {on_change} value={self.func_string.clone()} />
-                    {"FPS: "} {self.average_fps as usize } {"    Particles: "} {self.particles.len()}
+                    <div> {"FPS: "} {self.average_fps as usize } {"    Particles: "} {self.particles.len()} </div>
                 </div>
                 <canvas
                     id="canvas"
+                    class="canvas"
                     ref={self.canvas.clone()}>
                 </canvas>
             </div>

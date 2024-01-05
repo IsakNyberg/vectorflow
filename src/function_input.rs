@@ -21,14 +21,12 @@ pub fn function_input(props: &Props) -> Html {
         on_change.emit(get_value_from_textarea_event(input_event));
     });
 
-    let style = format!("height: 80px; width: 500px; rows=5; overflow: hidden;");
-
     html! {
         <textarea
+            class="function-input"
             placeholder="(x, y)"
             value={value}
             oninput={oninput}
-            style={style}
             spellcheck="false"
         />
     }
