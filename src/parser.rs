@@ -146,7 +146,7 @@ fn field_function_parser(tokens_iter: impl Iterator<Item = Token>) -> Result<Fun
     Ok(Function::V(Box::new(x), Box::new(y)))
 }
 
-
+#[allow(dead_code)]
 fn parser(tokens_iter: impl Iterator<Item = Token>) -> Result<Function, String> {
     let mut tokens_iter = tokens_iter.peekable();
     let f =  prase_add_sub(&mut tokens_iter)?;
@@ -438,6 +438,7 @@ pub fn pretty_print(input: String) -> String {
     }
 }
 
+#[allow(dead_code)]
 pub fn interpret(input: String) -> Result<Box<dyn Fn((f64, f64)) -> f64>, String> {
     let tokens = lexer(&input)?;
     let fun = parser(tokens.into_iter());
@@ -492,7 +493,7 @@ fn test_all() {
     assert_eq!(interpret("len(x, y) / 2".to_string()).unwrap()(arg), (x * x + y * y).sqrt() / 2.0);
 }
 
-#[test]
+#[allow(dead_code)]
 fn main() {
     // read from stdin
     println!("X=");

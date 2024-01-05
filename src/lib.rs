@@ -59,14 +59,7 @@ impl Component for AnimationCanvas {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        let func = match interpret_field_function(&DEFAULT_FUNCTION.to_string()) {
-            Ok(f) => f,
-            Err(e) => {
-                info!("{}", e);
-                info!("Using default function");
-                Box::new(move |(x, y)| (x, y))
-            }
-        };
+        let func = interpret_field_function(&DEFAULT_FUNCTION.to_string()).unwrap();
         
 
         ctx.link().send_future(async {Msg::Init});
