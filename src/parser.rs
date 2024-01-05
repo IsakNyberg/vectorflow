@@ -45,7 +45,17 @@ enum Token {
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-           Token::Operator(c) => write!(f, "{}", c),
+           Token::Operator(c) => {
+                match c {
+                    's' => write!(f, "sin"),
+                    'c' => write!(f, "cos"),
+                    't' => write!(f, "tan"),
+                    'q' => write!(f, "sqrt"),
+                    'a' => write!(f, "abs"),
+                    'l' => write!(f, "len"),
+                    c => write!(f, "{}", c),
+                }
+           },
            Token::Number(n) => write!(f, "{}", n),
            Token::Const(s) => write!(f, "{}", s),
            Token::Variable(v) => {
@@ -134,8 +144,8 @@ fn field_function_parser(tokens_iter: impl Iterator<Item = Token>) -> Result<Fun
     let y = prase_add_sub(&mut tokens_iter)?;
     match tokens_iter.next() {
         Some(Token::Operator(')')) => {}
-        Some(e) => return Err(format!("in fn len expected ')' not '{}'", e)),
-        None => return Err(format!("in fn len expected ')' not end of input")),
+        Some(e) => return Err(format!("expected ')' not '{}'", e)),
+        None => return Err(format!("expected ')' not end of input")),
     }
     
     match tokens_iter.next() {
@@ -241,10 +251,10 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
             // now if we parse the next expression we will get the expression inside the brackets
             // and then we epect the next token to be the corresponding closing bracket
             let inside = prase_add_sub(tokens)?;
-            if let Some(Token::Operator(')')) = tokens.next() {
-                Ok(Expression::Brackets(Box::new(inside)))
-            } else {
-                Err(format!("expected ')' not '{}'" , tokens.next().unwrap()))
+            match tokens.next() {
+                Some(Token::Operator(')')) =>  Ok(Expression::Brackets(Box::new(inside))),
+                Some(token) => Err(format!("expected ')' not '{}'" , token)),
+                None => Err(format!("expected ')' not end of input")),
             }
         }
         Some(Token::Operator('l')) => {
@@ -252,16 +262,16 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
             // expect a '('
             let x: Expression;
             let y: Expression;
-            if let Some(Token::Operator('(')) = tokens.next() {
-                x = prase_add_sub(tokens)?;
-            } else {
-                return Err(format!("in fn len expected '(' not '{}'", tokens.next().unwrap()));
+            match tokens.next() {
+                Some(Token::Operator('(')) =>  x = prase_add_sub(tokens)?,
+                Some(token) => return Err(format!("in fn len expected '(' not '{}'" , token)),
+                None => return Err(format!("in fn len expected '(' not end of input")),
             }
             // expect a ','
-            if let Some(Token::Operator(',')) = tokens.next() {
-                y = prase_add_sub(tokens)?;
-            } else {
-                return Err(format!("in fn len expected ',' not '{}'", tokens.next().unwrap()));
+            match tokens.next() {
+                Some(Token::Operator(',')) =>  y = prase_add_sub(tokens)?,
+                Some(token) => return Err(format!("in fn len expected ',' not '{}'" , token)),
+                None => return Err(format!("in fn len expected ',' not end of input")),
             }
             // expect a ')'
             match tokens.next() {
@@ -316,9 +326,9 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
             tokens.next();
             Ok(Expression::Variable(var))
         }
-        Some(Token::Operator(c)) => Err(format!("expected number or '(', not Operator '{}'", c)),
+        Some(Token::Operator(c)) => Err(format!("expected expression, not '{}'", c)),
 
-        None => Err(format!("expected number or '(', not end of input")),
+        None => Err(format!("expected expression, not end of input")),
 
     }
 }
