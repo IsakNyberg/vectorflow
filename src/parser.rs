@@ -128,16 +128,16 @@ fn field_function_parser(tokens_iter: impl Iterator<Item = Token>) -> Result<Fun
     // remove opening bracket    
     match tokens_iter.next() {
         Some(Token::Operator('(')) => {}
-        Some(e) => return Err(format!("in fn len expected '(' not '{}'", e)),
-        None => return Err(format!("in fn len expected '(' not end of input")),
+        Some(e) => return Err(format!("Function must start with '(' not '{}'", e)),
+        None => return Err(format!("Function is empty")),
     }
 
     // parse left hand side and then expect a comma
     let x = prase_add_sub(&mut tokens_iter)?;
     match tokens_iter.next() {
         Some(Token::Operator(',')) => {}
-        Some(e) => return Err(format!("in fn len expected ',' not '{}'", e)),
-        None => return Err(format!("in fn len expected ',' not end of input")),
+        Some(e) => return Err(format!("expected ',' not '{}'", e)),
+        None => return Err(format!("Function must be two dimensional, seperated by ','")),
     }
 
     // parse right hand side and then expect a closing bracket
@@ -145,7 +145,7 @@ fn field_function_parser(tokens_iter: impl Iterator<Item = Token>) -> Result<Fun
     match tokens_iter.next() {
         Some(Token::Operator(')')) => {}
         Some(e) => return Err(format!("expected ')' not '{}'", e)),
-        None => return Err(format!("expected ')' not end of input")),
+        None => return Err(format!("Function must end with ')'")),
     }
     
     match tokens_iter.next() {
