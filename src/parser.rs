@@ -29,7 +29,10 @@ enum Expression {
     Cos(Box<Expression>),
     Tan(Box<Expression>),
     Abs(Box<Expression>),
+    Floor(Box<Expression>),
+    Ceil(Box<Expression>),
     Sqrt(Box<Expression>),
+    Mod(Box<Expression>, Box<Expression>),
     Len(Box<Expression>, Box<Expression>),
     Pow(Box<Expression>, Box<Expression>),
 }
@@ -47,9 +50,9 @@ impl std::fmt::Display for Token {
         match self {
            Token::Operator(c) => {
                 match c {
-                    's' => write!(f, "sin"),
-                    'c' => write!(f, "cos"),
-                    't' => write!(f, "tan"),
+                    'S' => write!(f, "sin"),
+                    'C' => write!(f, "cos"),
+                    'T' => write!(f, "tan"),
                     'q' => write!(f, "sqrt"),
                     'a' => write!(f, "abs"),
                     'l' => write!(f, "len"),
@@ -103,12 +106,15 @@ fn lex_token_string(token_string: String) -> Result<Token, String> {
         "pi" | "e" => Ok(Token::Const(token_string)),
         "x" => Ok(Token::Variable(Var::X)),
         "y" => Ok(Token::Variable(Var::Y)),
-        "sin" => Ok(Token::Operator('s')),
-        "cos" => Ok(Token::Operator('c')),
-        "tan" => Ok(Token::Operator('t')),
+        "sin" => Ok(Token::Operator('S')),
+        "cos" => Ok(Token::Operator('C')),
+        "tan" => Ok(Token::Operator('T')),
         "sqrt" => Ok(Token::Operator('q')),
         "abs" => Ok(Token::Operator('a')),
         "len" => Ok(Token::Operator('l')),
+        "mod" => Ok(Token::Operator('m')),
+        "floor" => Ok(Token::Operator('f')),
+        "ceil" => Ok(Token::Operator('c')),
         
         n => {
             let num = n.parse::<f64>();
@@ -193,19 +199,19 @@ fn prase_add_sub(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<E
 
 fn parse_mult_div(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<Expression, String> {
     // first go as deep into the recursion as possible
-    let mut lhs = parse_function(tokens)?;
+    let mut lhs = parse_exponent(tokens)?;
 
     loop {
         // while we can still see a '*' or '/' operator (with numbers in between)
         match tokens.peek() {
             Some(Token::Operator('*')) => {
                 tokens.next();
-                let rhs = parse_function(tokens)?;
+                let rhs = parse_exponent(tokens)?;
                 lhs = Expression::Mult(Box::new(lhs), Box::new(rhs));
             }
             Some(Token::Operator('/')) => {
                 tokens.next();
-                let rhs = parse_function(tokens)?;
+                let rhs = parse_exponent(tokens)?;
                 lhs = Expression::Div(Box::new(lhs), Box::new(rhs));
             }
             // we see anything else we break and move up in recursion layers
@@ -216,7 +222,7 @@ fn parse_mult_div(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<
 }
 
 
-fn parse_function(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<Expression, String> {
+fn parse_exponent(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<Expression, String> {
     // first go as deep into the recursion as possible
     let mut lhs = parse_num_bracket(tokens)?;
 
@@ -225,9 +231,9 @@ fn parse_function(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<
         match tokens.peek() {
             Some(Token::Operator('^')) => {
                 tokens.next();
-                let rhs = parse_num_bracket(tokens)?;
+                let rhs = parse_exponent(tokens)?;
                 lhs = Expression::Pow(Box::new(lhs), Box::new(rhs));
-            }
+            },
             // we see anything else we break and move up in recursion layers
             _ => break,
         }
@@ -280,6 +286,29 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
                 None => Err(format!("in fn len expected ')' not end of input")),
             }
         }
+        Some(Token::Operator('m')) => {
+            tokens.next();
+            // expect a '('
+            let lhs: Expression;
+            let rhs: Expression;
+            match tokens.next() {
+                Some(Token::Operator('(')) =>  lhs = prase_add_sub(tokens)?,
+                Some(token) => return Err(format!("in fn len expected '(' not '{}'" , token)),
+                None => return Err(format!("in fn len expected '(' not end of input")),
+            }
+            // expect a ','
+            match tokens.next() {
+                Some(Token::Operator(',')) =>  rhs = prase_add_sub(tokens)?,
+                Some(token) => return Err(format!("in fn len expected ',' not '{}'" , token)),
+                None => return Err(format!("in fn len expected ',' not end of input")),
+            }
+            // expect a ')'
+            match tokens.next() {
+                Some(Token::Operator(')')) => Ok(Expression::Mod(Box::new(lhs), Box::new(rhs))),
+                Some(e) => Err(format!("in fn len expected ')' not '{}'", e)),
+                None => Err(format!("in fn len expected ')' not end of input")),
+            }
+        },
         Some(Token::Operator('-')) => {
             // unary minus
             tokens.next();
@@ -287,17 +316,17 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
             Ok(Expression::Neg(Box::new(inside)))
 
         }
-        Some(Token::Operator('s')) => {
+        Some(Token::Operator('S')) => {
             tokens.next();
             let inside = parse_num_bracket(tokens)?;
             Ok(Expression::Sin(Box::new(inside)))
         }
-        Some(Token::Operator('c')) => {
+        Some(Token::Operator('C')) => {
             tokens.next();
             let inside = parse_num_bracket(tokens)?;
             Ok(Expression::Cos(Box::new(inside)))
         }
-        Some(Token::Operator('t')) => {
+        Some(Token::Operator('T')) => {
             tokens.next();
             let inside = parse_num_bracket(tokens)?;
             Ok(Expression::Tan(Box::new(inside)))
@@ -311,6 +340,16 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
             tokens.next();
             let inside = parse_num_bracket(tokens)?;
             Ok(Expression::Sqrt(Box::new(inside)))
+        }
+        Some(Token::Operator('f')) => {
+            tokens.next();
+            let inside = parse_num_bracket(tokens)?;
+            Ok(Expression::Floor(Box::new(inside)))
+        }
+        Some(Token::Operator('c')) => {
+            tokens.next();
+            let inside = parse_num_bracket(tokens)?;
+            Ok(Expression::Ceil(Box::new(inside)))
         }
         Some(Token::Const(s)) => {
             let num = match s.as_str() {
@@ -352,6 +391,9 @@ fn expression_to_str(exp: &Expression) -> String {
         Expression::Neg(a) => format!("-{}", expression_to_str(a)),
         Expression::Len(a, b) => format!("len({}, {})", expression_to_str(a), expression_to_str(b)),
         Expression::Pow(a, b) => format!("{}^{}", expression_to_str(a), expression_to_str(b)),
+        Expression::Mod(a, b) => format!("mod({}, {})", expression_to_str(a), expression_to_str(b)),
+        Expression::Floor(a) => format!("floor{}", expression_to_str(a)),
+        Expression::Ceil(a) => format!("ceil{}", expression_to_str(a)),
     }
 }
 
@@ -392,6 +434,16 @@ fn evaluate(exp: Expression) -> Box<dyn Fn((f64, f64)) -> f64> {
                 f64::sqrt(dx*dx + dy*dy)
             })
         }
+        Expression::Mod(a, b) => {
+            let eval_a = evaluate(*a);
+            let eval_b = evaluate(*b);
+            Box::new(move |(x, y)| {
+                let a = eval_a((x, y));
+                let b = eval_b((x, y));
+                // this is the same as a % b but it works for negative numbers
+                ((a % b) + b) % b 
+            })
+        }
         Expression::Neg(a) => {
             let eval_a = evaluate(*a);
             Box::new(move |(x, y)| -eval_a((x, y)))
@@ -415,6 +467,14 @@ fn evaluate(exp: Expression) -> Box<dyn Fn((f64, f64)) -> f64> {
         Expression::Sqrt(a) => {
             let eval_a = evaluate(*a);
             Box::new(move |(x, y)| eval_a((x, y)).sqrt())
+        }
+        Expression::Ceil(a) => {
+            let eval_a = evaluate(*a);
+            Box::new(move |(x, y)| eval_a((x, y)).ceil())
+        }
+        Expression::Floor(a) => {
+            let eval_a = evaluate(*a);
+            Box::new(move |(x, y)| eval_a((x, y)).floor())
         }
         Expression::Number(n) => {
             let number = n;
@@ -480,6 +540,7 @@ fn test_all() {
     let arg = (x, y);
     assert_eq!(interpret("5".to_string()).unwrap()(arg), 5.0);
     assert_eq!(interpret("-5".to_string()).unwrap()(arg), -5.0);
+    assert_eq!(interpret("x".to_string()).unwrap()(arg), x);
     assert_eq!(interpret("x+y".to_string()).unwrap()(arg), x+y);
     assert_eq!(interpret("x*y".to_string()).unwrap()(arg), x*y);
     assert_eq!(interpret("x/y".to_string()).unwrap()(arg), x / y);
@@ -490,6 +551,9 @@ fn test_all() {
     assert_eq!(interpret("tan(x)".to_string()).unwrap()(arg), x.tan());
     assert_eq!(interpret("sqrt(x)".to_string()).unwrap()(arg), x.sqrt());
     assert_eq!(interpret("len(x, y)".to_string()).unwrap()(arg), (x*x+y*y).sqrt());
+    assert_eq!(interpret("mod(x, y)".to_string()).unwrap()(arg), x % y);
+    assert_eq!(interpret("floor(x)".to_string()).unwrap()(arg), x.floor());
+    assert_eq!(interpret("ceil(x)".to_string()).unwrap()(arg), x.ceil());
 
     // Combinations of functions
     assert_eq!(interpret("abs(x) + sin(y)".to_string()).unwrap()(arg), x.abs() + y.sin());
