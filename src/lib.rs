@@ -122,7 +122,7 @@ impl Component for AnimationCanvas {
                     self.average_fps = 1000.0 * self.frame_count as f64 / FPS_UPDATE_PERIOD;
                     self.frame_count = 0;
 
-                    let fps_ratio = (self.average_fps / self.config.target_fps).max(0.99).min(1.01);
+                    let fps_ratio = (self.average_fps / self.config.target_fps).max(0.90).min(1.10);
                     let target_num_particles = (self.particles.len() as f64 * fps_ratio) as usize;
                     info!("FPS: {}   {}", self.average_fps as i32, target_num_particles);
                     
