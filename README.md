@@ -87,7 +87,7 @@ len(x, y)
 ```
 
 # Cool Examples
-Here are som cool example, feel free to suggest some yourself!
+Here are some cool example, feel free to suggest some yourself!
 
 Dipole
 
