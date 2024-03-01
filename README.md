@@ -65,7 +65,7 @@ Wow! Two simple operations, and the final animation looks like an art piece!
 Vector fields turns out to be very flexible generative framework.
 
 # Parser Syntax
-The parser function utilizes the `x` and `y` coordinates of each pixel to compute the corresponding vector, it also has the ability to use the `t` variable to create time-dependent fields where `t` is measured in seconds, and resers every minute.
+The parser function utilizes the `x` and `y` coordinates of each pixel to compute the corresponding vector, it also has the ability to use the `t` variable to create time-dependent fields where `t` is measured in seconds, and resets every minute.
 Furthermore, it offers the following functionalities:
 
 ```
