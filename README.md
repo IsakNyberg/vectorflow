@@ -65,12 +65,18 @@ Wow! Two simple operations, and the final animation looks like an art piece!
 Vector fields turns out to be very flexible generative framework.
 
 # Parser Syntax
-The parser function utilizes the `x` and `y` coordinates of each pixel to compute the corresponding vector. Furthermore, it offers the following functionalities:
+The parser function utilizes the `x` and `y` coordinates of each pixel to compute the corresponding vector, it also has the ability to use the `t` variable to create time-dependent fields where `t` is measured in seconds, and resets every minute.
+Furthermore, it offers the following functionalities:
 
 ```
 constants:
 pi
 e
+
+variables:
+x
+y
+t  // time in seconds
 
 Single variable functions:
 sin(x)
@@ -87,7 +93,7 @@ len(x, y)
 ```
 
 # Cool Examples
-Here are som cool example, feel free to suggest some yourself!
+Here are some cool example, feel free to suggest some yourself!
 
 Dipole
 
@@ -118,16 +124,16 @@ y/(len(x,y)^2/100000 - 0.001*x)
 Mosaic
 ```
 (
-200*sin(y/100 + x/1000)
+10*sin(y/100 + x/1000)*t
 ,
-200*cos(x/100 - y/1000)
+10*cos(x/100 - y/1000)*t
 )
 ```
 Eye
 ```
 (
-x*cos(400/len(x,y)) - y*sin(400/len(x,y))
+x*cos(abs(sin(t/4))*600/len(x,y)) - y*sin(abs(sin(t/4))*600/len(x,y))
 ,
-x*sin(400/len(x,y)) + y*cos(400/len(x,y))
+x*sin(abs(sin(t/4))*600/len(x,y)) + y*cos(abs(sin(t/4))*600/len(x,y))
 )
 ```

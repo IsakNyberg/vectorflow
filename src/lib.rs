@@ -36,7 +36,7 @@ struct Config {
     avg_lifetime: i32,
     fg_colour: JsValue,
     bg_colour: JsValue,
-    func: Box<dyn Fn((f64, f64)) -> (f64, f64)>,
+    func: Box<dyn Fn((f64, f64, f64)) -> (f64, f64)>,
     target_fps: f64,
 }
 
@@ -51,7 +51,8 @@ struct AnimationCanvas {
 
     time_delta: f64,
     average_fps: f64,
-    frame_count: usize,
+    frame_counter: usize,
+    start_time: f64,
 }
 
 impl Component for AnimationCanvas {
@@ -85,7 +86,8 @@ impl Component for AnimationCanvas {
 
             time_delta: js_sys::Date::now(),
             average_fps: TARGET_FPS,
-            frame_count: 0,
+            frame_counter: 0,
+            start_time: js_sys::Date::now(),
         }
     }
 
@@ -114,13 +116,13 @@ impl Component for AnimationCanvas {
                 
                 self.update_particles(delta);
                 self.render();
-                self.frame_count += 1;
+                self.frame_counter += 1;
 
                 let time = js_sys::Date::now();
                 if time - self.time_delta > FPS_UPDATE_PERIOD {
                     self.time_delta = time;
-                    self.average_fps = 1000.0 * self.frame_count as f64 / FPS_UPDATE_PERIOD;
-                    self.frame_count = 0;
+                    self.average_fps = 1000.0 * self.frame_counter as f64 / FPS_UPDATE_PERIOD;
+                    self.frame_counter = 0;
 
                     let fps_ratio = (self.average_fps / self.config.target_fps).max(0.90).min(1.10);
                     let target_num_particles = (self.particles.len() as f64 * fps_ratio) as usize;
@@ -190,8 +192,12 @@ impl Component for AnimationCanvas {
 
 impl AnimationCanvas {
     fn update_particles(&mut self, delta: f64) {
+        let t = (js_sys::Date::now() - self.start_time) / 1000.0;
+        if t > 60.0 {
+            self.start_time = js_sys::Date::now();
+        }
         for particle in self.particles.iter_mut() {
-            if !particle.update(&self.config.func, delta) { 
+            if !particle.update(&self.config.func, delta, t) { 
                 particle.respawn();
             }
         }

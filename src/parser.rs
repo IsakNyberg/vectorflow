@@ -8,6 +8,8 @@
 
 use std::iter::Peekable;
 
+type VectorFunctionType = dyn Fn((f64, f64, f64)) -> f64;
+
 // vector or scalar function
 enum Function {
     V(Box<Expression>, Box<Expression>),
@@ -63,8 +65,9 @@ impl std::fmt::Display for Token {
            Token::Const(s) => write!(f, "{}", s),
            Token::Variable(v) => {
                 match v {
-                     Var::X => write!(f, "x"),
-                     Var::Y => write!(f, "y"),
+                    Var::X => write!(f, "x"),
+                    Var::Y => write!(f, "y"),
+                    Var::T => write!(f, "t"),
                 }
            }
         }
@@ -75,6 +78,7 @@ impl std::fmt::Display for Token {
 enum Var {
     X,
     Y,
+    T,
 }
 
 
@@ -106,6 +110,7 @@ fn lex_token_string(token_string: String) -> Result<Token, String> {
         "pi" | "e" => Ok(Token::Const(token_string)),
         "x" => Ok(Token::Variable(Var::X)),
         "y" => Ok(Token::Variable(Var::Y)),
+        "t" => Ok(Token::Variable(Var::T)),
         "sin" => Ok(Token::Operator('S')),
         "cos" => Ok(Token::Operator('C')),
         "tan" => Ok(Token::Operator('T')),
@@ -398,97 +403,98 @@ fn expression_to_str(exp: &Expression) -> String {
 }
 
 // returns a closed form of the expression with (x, y) as arguments this should be macro
-fn evaluate(exp: Expression) -> Box<dyn Fn((f64, f64)) -> f64> {
+fn evaluate(exp: Expression) -> Box<VectorFunctionType> {
     match exp {
         Expression::Add(a, b) => {
             let eval_a = evaluate(*a);
             let eval_b = evaluate(*b);
-            Box::new(move |(x, y)| eval_a((x, y)) + eval_b((x, y)))
+            Box::new(move |(x, y, t)| eval_a((x, y, t)) + eval_b((x, y, t)))
         }
         Expression::Sub(a, b) => {
             let eval_a = evaluate(*a);
             let eval_b = evaluate(*b);
-            Box::new(move |(x, y)| eval_a((x, y)) - eval_b((x, y)))
+            Box::new(move |(x, y, t)| eval_a((x, y, t)) - eval_b((x, y, t)))
         }
         Expression::Mult(a, b) => {
             let eval_a = evaluate(*a);
             let eval_b = evaluate(*b);
-            Box::new(move |(x, y)| eval_a((x, y)) * eval_b((x, y)))
+            Box::new(move |(x, y, t)| eval_a((x, y, t)) * eval_b((x, y, t)))
         }
         Expression::Div(a, b) => {
             let eval_a = evaluate(*a);
             let eval_b = evaluate(*b);
-            Box::new(move |(x, y)| eval_a((x, y)) / eval_b((x, y)))
+            Box::new(move |(x, y, t)| eval_a((x, y, t)) / eval_b((x, y, t)))
         }
         Expression::Pow(a, b) => {
             let eval_a = evaluate(*a);
             let eval_b = evaluate(*b);
-            Box::new(move |(x, y)| f64::powf(eval_a((x, y)), eval_b((x, y)))) 
+            Box::new(move |(x, y, t)| f64::powf(eval_a((x, y, t)), eval_b((x, y, t)))) 
         }
         Expression::Len(a, b) => {
             let eval_a = evaluate(*a);
             let eval_b = evaluate(*b);
-            Box::new(move |(x, y)| {
-                let dx = eval_a((x, y));
-                let dy = eval_b((x, y));
+            Box::new(move |(x, y, t)| {
+                let dx = eval_a((x, y, t));
+                let dy = eval_b((x, y, t));
                 f64::sqrt(dx*dx + dy*dy)
             })
         }
         Expression::Mod(a, b) => {
             let eval_a = evaluate(*a);
             let eval_b = evaluate(*b);
-            Box::new(move |(x, y)| {
-                let a = eval_a((x, y));
-                let b = eval_b((x, y));
+            Box::new(move |(x, y, t)| {
+                let a = eval_a((x, y, t));
+                let b = eval_b((x, y, t));
                 // this is the same as a % b but it works for negative numbers
                 ((a % b) + b) % b 
             })
         }
         Expression::Neg(a) => {
             let eval_a = evaluate(*a);
-            Box::new(move |(x, y)| -eval_a((x, y)))
+            Box::new(move |(x, y, t)| -eval_a((x, y, t)))
         }
         Expression::Sin(a) => {
             let eval_a = evaluate(*a);
-            Box::new(move |(x, y)| eval_a((x, y)).sin())
+            Box::new(move |(x, y, t)| eval_a((x, y, t)).sin())
         }
         Expression::Abs(a) => {
             let eval_a = evaluate(*a);
-            Box::new(move |(x, y)| f64::abs(eval_a((x, y))))
+            Box::new(move |(x, y, t)| f64::abs(eval_a((x, y, t))))
         }
         Expression::Cos(a) => {
             let eval_a = evaluate(*a);
-            Box::new(move |(x, y)| eval_a((x, y)).cos())
+            Box::new(move |(x, y, t)| eval_a((x, y, t)).cos())
         }
         Expression::Tan(a) => {
             let eval_a = evaluate(*a);
-            Box::new(move |(x, y)| eval_a((x, y)).tan())
+            Box::new(move |(x, y, t)| eval_a((x, y, t)).tan())
         }
         Expression::Sqrt(a) => {
             let eval_a = evaluate(*a);
-            Box::new(move |(x, y)| eval_a((x, y)).sqrt())
+            Box::new(move |(x, y, t)| eval_a((x, y, t)).sqrt())
         }
         Expression::Ceil(a) => {
             let eval_a = evaluate(*a);
-            Box::new(move |(x, y)| eval_a((x, y)).ceil())
+            Box::new(move |(x, y, t)| eval_a((x, y, t)).ceil())
         }
         Expression::Floor(a) => {
             let eval_a = evaluate(*a);
-            Box::new(move |(x, y)| eval_a((x, y)).floor())
+            Box::new(move |(x, y, t)| eval_a((x, y, t)).floor())
         }
         Expression::Number(n) => {
             let number = n;
-            Box::new(move |(_, _)| number)
+            Box::new(move |(_, _, _)| number)
         }
         Expression::Brackets(a) => {
             let eval_a = evaluate(*a);
-            Box::new(move |(x, y)| eval_a((x, y)))
+            Box::new(move |(x, y, t)| eval_a((x, y, t)))
         }
         Expression::Variable(s) => {
-            Box::new(move |(x, y)| {
+            Box::new(move |(x, y, t)| {
                 match s {
                     Var::X => x,
-                    Var::Y => y,                    
+                    Var::Y => y,
+                    Var::T => t,
                 }
             })
         }
@@ -509,7 +515,7 @@ pub fn pretty_print(input: String) -> String {
 }
 
 #[allow(dead_code)]
-pub fn interpret(input: String) -> Result<Box<dyn Fn((f64, f64)) -> f64>, String> {
+pub fn interpret(input: String) -> Result<Box<VectorFunctionType>, String> {
     let tokens = lexer(&input)?;
     let fun = parser(tokens.into_iter());
     match fun {
@@ -519,14 +525,14 @@ pub fn interpret(input: String) -> Result<Box<dyn Fn((f64, f64)) -> f64>, String
     }
 }
 
-pub fn interpret_field_function(input: &String) -> Result<Box<dyn Fn((f64, f64)) -> (f64, f64)>, String> {
+pub fn interpret_field_function(input: &String) -> Result<Box<dyn Fn((f64, f64, f64)) -> (f64, f64)>, String> {
     let tokens = lexer(&input)?;
     let fun = field_function_parser(tokens.into_iter());
     match fun {
         Ok(Function::V(exp_x, exp_y)) => {
             let eval_x = evaluate(*exp_x);
             let eval_y = evaluate(*exp_y);
-            Ok(Box::new(move |(x, y)| (eval_x((x, y)), eval_y((x, y)))))
+            Ok(Box::new(move |(x, y, t)| (eval_x((x, y, t)), eval_y((x, y, t)))))
         }
         Ok(Function::S(..)) => Err("expected vector function".to_string()),
         Err(e) => Err(e),
@@ -537,7 +543,8 @@ pub fn interpret_field_function(input: &String) -> Result<Box<dyn Fn((f64, f64))
 fn test_all() {
     let x = 3.0;
     let y = 4.0;
-    let arg = (x, y);
+    let t = 5.0;
+    let arg = (x, y, t);
     assert_eq!(interpret("5".to_string()).unwrap()(arg), 5.0);
     assert_eq!(interpret("-5".to_string()).unwrap()(arg), -5.0);
     assert_eq!(interpret("x".to_string()).unwrap()(arg), x);
@@ -554,6 +561,8 @@ fn test_all() {
     assert_eq!(interpret("mod(x, y)".to_string()).unwrap()(arg), x % y);
     assert_eq!(interpret("floor(x)".to_string()).unwrap()(arg), x.floor());
     assert_eq!(interpret("ceil(x)".to_string()).unwrap()(arg), x.ceil());
+    assert_eq!(interpret("t".to_string()).unwrap()(arg), t);
+    assert_eq!(interpret("x+t".to_string()).unwrap()(arg), x+t);
 
     // Combinations of functions
     assert_eq!(interpret("abs(x) + sin(y)".to_string()).unwrap()(arg), x.abs() + y.sin());
@@ -579,6 +588,7 @@ fn main() {
     std::io::stdin().read_line(&mut input).unwrap();
     let y = input.trim().parse::<f64>().unwrap();
     println!("Enter expression (empty line to quit):");
+    let t = 0.0;
     loop {    
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
@@ -598,6 +608,6 @@ fn main() {
         println!("{}", expression_to_str(&expression));
         // evaluate
         let result = evaluate(expression);
-        println!("= {}", result((x, y)));
+        println!("= {}", result((x, y, t)));
     }
 }
