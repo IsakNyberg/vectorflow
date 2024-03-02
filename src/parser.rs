@@ -391,33 +391,83 @@ fn expression_to_str(exp: &Expression) -> String {
     }
 }
 
+macro_rules! evaluate_unary_expression {
+    ($expr:expr, $op:expr) => {{
+        let eval_a = evaluate(*$expr);
+        Box::new(move |(x, y, t)| $op(eval_a((x, y, t))))
+    }};
+}
+macro_rules! evaluate_binary_expression {
+    ($expr_a:expr, $expr_b:expr, $op:expr) => {{
+        let eval_a = evaluate(*$expr_a);
+        let eval_b = evaluate(*$expr_b);
+        Box::new(move |(x, y, t)| $op(eval_a((x, y, t)), eval_b((x, y, t))))
+    }};
+}
+
 // returns a closed form of the expression with (x, y) as arguments this should be macro
 fn evaluate(exp: Expression) -> Box<VectorFunctionType> {
     match exp {
-        Expression::Add(a, b) => {
+        // single argument
+        Expression::Variable(s) => {
+            Box::new(move |(x, y, t)| {
+                match s {
+                    Var::X => x,
+                    Var::Y => y,
+                    Var::T => t,
+                }
+            })
+        }
+        Expression::Number(n) => {
+            let number = n;
+            Box::new(move |(_, _, _)| number)
+        }
+        Expression::Neg(a) => {
+            evaluate_unary_expression!(a, |x: f64| -x)
+        }
+        Expression::Sin(a) => {
+            evaluate_unary_expression!(a, |x: f64| f64::sin(x))
+        }
+        Expression::Abs(a) => {
+            evaluate_unary_expression!(a, |x: f64| f64::abs(x))
+        }
+        Expression::Cos(a) => {
+            evaluate_unary_expression!(a, |x: f64| f64::cos(x))
+        }
+        Expression::Tan(a) => {
+            evaluate_unary_expression!(a, |x: f64| f64::tan(x))
+        }
+        Expression::Sqrt(a) => {
+            evaluate_unary_expression!(a, |x: f64| f64::sqrt(x))
+        }
+        Expression::Ceil(a) => {
+            evaluate_unary_expression!(a, |x: f64| f64::ceil(x))
+        }
+        Expression::Floor(a) => {
+            evaluate_unary_expression!(a, |x: f64| f64::floor(x))
+        }
+        Expression::Brackets(a) => {
             let eval_a = evaluate(*a);
-            let eval_b = evaluate(*b);
-            Box::new(move |(x, y, t)| eval_a((x, y, t)) + eval_b((x, y, t)))
+            Box::new(move |(x, y, t)| eval_a((x, y, t)))
+        }
+        // two arguments
+        Expression::Add(a, b) => {
+            evaluate_binary_expression!(a, b, |x, y| x + y)
         }
         Expression::Sub(a, b) => {
-            let eval_a = evaluate(*a);
-            let eval_b = evaluate(*b);
-            Box::new(move |(x, y, t)| eval_a((x, y, t)) - eval_b((x, y, t)))
+            evaluate_binary_expression!(a, b, |x, y| x - y)
         }
         Expression::Mult(a, b) => {
-            let eval_a = evaluate(*a);
-            let eval_b = evaluate(*b);
-            Box::new(move |(x, y, t)| eval_a((x, y, t)) * eval_b((x, y, t)))
+            evaluate_binary_expression!(a, b, |x, y| x * y)
         }
         Expression::Div(a, b) => {
-            let eval_a = evaluate(*a);
-            let eval_b = evaluate(*b);
-            Box::new(move |(x, y, t)| eval_a((x, y, t)) / eval_b((x, y, t)))
+            evaluate_binary_expression!(a, b, |x, y| x / y)
         }
         Expression::Pow(a, b) => {
-            let eval_a = evaluate(*a);
-            let eval_b = evaluate(*b);
-            Box::new(move |(x, y, t)| f64::powf(eval_a((x, y, t)), eval_b((x, y, t)))) 
+            evaluate_binary_expression!(a, b, |x, y| f64::powf(x, y))
+        }
+        Expression::Mod(a, b) => {
+            evaluate_binary_expression!(a, b, |x, y| ((x % y) + y) % y )
         }
         /*Expression::Len(a, b) => {
             let eval_a = evaluate(*a);
@@ -428,65 +478,6 @@ fn evaluate(exp: Expression) -> Box<VectorFunctionType> {
                 f64::sqrt(dx*dx + dy*dy)
             })
         }*/
-        Expression::Mod(a, b) => {
-            let eval_a = evaluate(*a);
-            let eval_b = evaluate(*b);
-            Box::new(move |(x, y, t)| {
-                let a = eval_a((x, y, t));
-                let b = eval_b((x, y, t));
-                // this is the same as a % b but it works for negative numbers
-                ((a % b) + b) % b 
-            })
-        }
-        Expression::Neg(a) => {
-            let eval_a = evaluate(*a);
-            Box::new(move |(x, y, t)| -eval_a((x, y, t)))
-        }
-        Expression::Sin(a) => {
-            let eval_a = evaluate(*a);
-            Box::new(move |(x, y, t)| eval_a((x, y, t)).sin())
-        }
-        Expression::Abs(a) => {
-            let eval_a = evaluate(*a);
-            Box::new(move |(x, y, t)| f64::abs(eval_a((x, y, t))))
-        }
-        Expression::Cos(a) => {
-            let eval_a = evaluate(*a);
-            Box::new(move |(x, y, t)| eval_a((x, y, t)).cos())
-        }
-        Expression::Tan(a) => {
-            let eval_a = evaluate(*a);
-            Box::new(move |(x, y, t)| eval_a((x, y, t)).tan())
-        }
-        Expression::Sqrt(a) => {
-            let eval_a = evaluate(*a);
-            Box::new(move |(x, y, t)| eval_a((x, y, t)).sqrt())
-        }
-        Expression::Ceil(a) => {
-            let eval_a = evaluate(*a);
-            Box::new(move |(x, y, t)| eval_a((x, y, t)).ceil())
-        }
-        Expression::Floor(a) => {
-            let eval_a = evaluate(*a);
-            Box::new(move |(x, y, t)| eval_a((x, y, t)).floor())
-        }
-        Expression::Number(n) => {
-            let number = n;
-            Box::new(move |(_, _, _)| number)
-        }
-        Expression::Brackets(a) => {
-            let eval_a = evaluate(*a);
-            Box::new(move |(x, y, t)| eval_a((x, y, t)))
-        }
-        Expression::Variable(s) => {
-            Box::new(move |(x, y, t)| {
-                match s {
-                    Var::X => x,
-                    Var::Y => y,
-                    Var::T => t,
-                }
-            })
-        }
     }
 }
 
