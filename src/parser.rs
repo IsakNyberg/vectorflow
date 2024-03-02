@@ -35,8 +35,8 @@ enum Expression {
     Ceil(Box<Expression>),
     Sqrt(Box<Expression>),
     Mod(Box<Expression>, Box<Expression>),
-    // Len(Box<Expression>, Box<Expression>),
     Pow(Box<Expression>, Box<Expression>),
+    Len(Box<Expression>, Box<Expression>, Box<Expression>, Box<Expression>),
 }
 
 #[derive(Clone)]
@@ -116,7 +116,7 @@ fn lex_token_string(token_string: String) -> Result<Token, String> {
         "tan" => Ok(Token::Operator('T')),
         "sqrt" => Ok(Token::Operator('q')),
         "abs" => Ok(Token::Operator('a')),
-        // "len" => Ok(Token::Operator('l')),
+        "len" => Ok(Token::Operator('l')),
         "mod" => Ok(Token::Operator('m')),
         "floor" => Ok(Token::Operator('f')),
         "ceil" => Ok(Token::Operator('c')),
@@ -275,29 +275,43 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
                 None => Err(format!("expected ')' not end of input")),
             }
         }
-        /*Some(Token::Operator('l')) => {
+        Some(Token::Operator('l')) => {
             tokens.next();
             // expect a '('
-            let x: Expression;
-            let y: Expression;
+            let x1: Expression;
+            let y1: Expression;
+            let x2: Expression;
+            let y2: Expression;
             match tokens.next() {
-                Some(Token::Operator('(')) =>  x = prase_add_sub(tokens)?,
-                Some(token) => return Err(format!("in fn len expected '(' not '{}'" , token)),
-                None => return Err(format!("in fn len expected '(' not end of input")),
+                Some(Token::Operator('(')) =>  x1 = prase_add_sub(tokens)?,
+                Some(token) => return Err(format!("in fn len argument 1: expected '(' not '{}'" , token)),
+                None => return Err(format!("in fn len argument 1: '(' not end of input")),
             }
             // expect a ','
             match tokens.next() {
-                Some(Token::Operator(',')) =>  y = prase_add_sub(tokens)?,
-                Some(token) => return Err(format!("in fn len expected ',' not '{}'" , token)),
-                None => return Err(format!("in fn len expected ',' not end of input")),
+                Some(Token::Operator(',')) =>  y1 = prase_add_sub(tokens)?,
+                Some(token) => return Err(format!("in fn len argument 2: expected ',' not '{}'" , token)),
+                None => return Err(format!("in fn len argument 2: ',' not end of input")),
+            }
+            // expect a ','
+            match tokens.next() {
+                Some(Token::Operator(',')) =>  x2 = prase_add_sub(tokens)?,
+                Some(token) => return Err(format!("in fn len argument 3: expected ',' not '{}'" , token)),
+                None => return Err(format!("in fn len argument 3: ',' not end of input")),
+            }
+            // expect a ','
+            match tokens.next() {
+                Some(Token::Operator(',')) =>  y2 = prase_add_sub(tokens)?,
+                Some(token) => return Err(format!("in fn len argument 4: expected ',' not '{}'" , token)),
+                None => return Err(format!("in fn len argument 4: ',' not end of input")),
             }
             // expect a ')'
             match tokens.next() {
-                Some(Token::Operator(')')) => Ok(Expression::Len(Box::new(x), Box::new(y))),
+                Some(Token::Operator(')')) => Ok(Expression::Len(Box::new(x1), Box::new(y1), Box::new(x2), Box::new(y2))),
                 Some(e) => Err(format!("in fn len expected ')' not '{}'", e)),
                 None => Err(format!("in fn len expected ')' not end of input")),
             }
-        }*/
+        }
         Some(Token::Operator('m')) => {
             tokens.next();
             // expect a '('
@@ -383,7 +397,13 @@ fn expression_to_str(exp: &Expression) -> String {
         Expression::Sqrt(a) => format!("sqrt{}", expression_to_str(a)),
         Expression::Abs(a) => format!("abs{}", expression_to_str(a)),
         Expression::Neg(a) => format!("-{}", expression_to_str(a)),
-        // Expression::Len(a, b) => format!("len({}, {})", expression_to_str(a), expression_to_str(b)),
+        Expression::Len(a, b, c, d) => format!(
+            "len({}, {}, {}, {})", 
+            expression_to_str(a), 
+            expression_to_str(b), 
+            expression_to_str(c), 
+            expression_to_str(d)
+        ),
         Expression::Pow(a, b) => format!("{}^{}", expression_to_str(a), expression_to_str(b)),
         Expression::Mod(a, b) => format!("mod({}, {})", expression_to_str(a), expression_to_str(b)),
         Expression::Floor(a) => format!("floor{}", expression_to_str(a)),
@@ -469,15 +489,17 @@ fn evaluate(exp: Expression) -> Box<VectorFunctionType> {
         Expression::Mod(a, b) => {
             evaluate_binary_expression!(a, b, |x, y| ((x % y) + y) % y )
         }
-        /*Expression::Len(a, b) => {
-            let eval_a = evaluate(*a);
-            let eval_b = evaluate(*b);
+        Expression::Len(x1, y1, x2, y2) => {
+            let eval_x1 = evaluate(*x1);
+            let eval_y1 = evaluate(*y1);
+            let eval_x2 = evaluate(*x2);
+            let eval_y2 = evaluate(*y2);
             Box::new(move |(x, y, t)| {
-                let dx = eval_a((x, y, t));
-                let dy = eval_b((x, y, t));
-                f64::sqrt(dx*dx + dy*dy)
+                let dx = eval_x2((x, y, t)) - eval_x1((x, y, t));
+                let dy = eval_y2((x, y, t)) - eval_y1((x, y, t));
+                f64::sqrt(dx * dx + dy * dy)
             })
-        }*/
+        }
     }
 }
 
@@ -537,7 +559,7 @@ fn test_all() {
     assert_eq!(interpret("sin(x)".to_string()).unwrap()(arg), x.sin());
     assert_eq!(interpret("tan(x)".to_string()).unwrap()(arg), x.tan());
     assert_eq!(interpret("sqrt(x)".to_string()).unwrap()(arg), x.sqrt());
-    //assert_eq!(interpret("len(x, y)".to_string()).unwrap()(arg), (x*x+y*y).sqrt());
+    assert_eq!(interpret("len(x, y, 0, 0)".to_string()).unwrap()(arg), (x*x+y*y).sqrt());
     assert_eq!(interpret("mod(x, y)".to_string()).unwrap()(arg), x % y);
     assert_eq!(interpret("floor(x)".to_string()).unwrap()(arg), x.floor());
     assert_eq!(interpret("ceil(x)".to_string()).unwrap()(arg), x.ceil());
@@ -553,7 +575,7 @@ fn test_all() {
     assert_eq!(interpret("x^2 + y^2".to_string()).unwrap()(arg), x.powf(2.0) + y.powf(2.0));
     assert_eq!(interpret("x + y * 2".to_string()).unwrap()(arg), x + y * 2.0);
     assert_eq!(interpret("sqrt(x + y)".to_string()).unwrap()(arg), (x + y).sqrt());
-    //assert_eq!(interpret("len(x, y) / 2".to_string()).unwrap()(arg), (x * x + y * y).sqrt() / 2.0);
+    assert_eq!(interpret("len(x, y, 7, 2) / 2".to_string()).unwrap()(arg), ((x-7.0)*(x-7.0) + (y-2.0)*(y-2.0)).sqrt() / 2.0);
 }
 
 #[allow(dead_code)]
