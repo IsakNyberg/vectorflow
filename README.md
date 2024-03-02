@@ -38,20 +38,20 @@ The field above can be written in a single formula:
 
 ```
 (
-50.0 * mod(floor(y/100), 2.0) - 25.0
+50 * (floor(y/100) % 2) - 25
 ,
 0.0
 )
 ```
-The floor function effectively rounds down all `y` values to the nearest integer. As a result, the first 100 pixels assume the value `0`, the subsequent 100 pixels take on the value `1`, and so forth. By applying the modulo operation `2` to these values, we obtain `0` for even numbers and `1` for odd numbers. We then manipulate this remainder to generate a final vector, which is either `(-25, 0)` or `(25, 0)`.
+The floor function effectively rounds down all `y` values to the nearest integer. As a result, the first 100 pixels assume the value `0`, the subsequent 100 pixels take on the value `1`, and so forth. By applying the modulo of `2` to these values, we obtain `0` for even numbers and `1` for odd numbers. We then manipulate this remainder to generate a final vector, which is either `(-25, 0)` or `(25, 0)`.
 
 Up until now, we've exclusively utilized one component of the velocity vector, specifically `x`, causing the particles to move solely horizontally. Let's experiment with configuring both components and observe the outcomes.
 
 ```
 (
-50.0 * mod(floor(y/100), 2.0) - 25.0
+50 * (floor(y/100) % 2) - 25
 ,
-50.0 * mod(floor(x/100), 2.0) - 25.0
+50 * (floor(x/100) % 2) - 25
 )
 ```
 
@@ -65,31 +65,37 @@ Wow! Two simple operations, and the final animation looks like an art piece!
 Vector fields turns out to be very flexible generative framework.
 
 # Parser Syntax
-The parser function utilizes the `x` and `y` coordinates of each pixel to compute the corresponding vector, it also has the ability to use the `t` variable to create time-dependent fields where `t` is measured in seconds, and resets every minute.
+The parser function utilizes the `x` and `y` coordinates as well as the distance from the origin `r` of each pixel to compute the corresponding vector, it also has the ability to use the `t` variable to create time-dependent fields where `t` is measured in seconds, and resers every minute.
 Furthermore, it offers the following functionalities:
 
 ```
 constants:
-pi
-e
+pi  // 3.141592653589793
+e   // 2.718281828459045
 
 variables:
 x
 y
 t  // time in seconds
+r  // distance from origin
 
 Single variable functions:
 sin(x)
 cos(x)
 tan(x)
-sqrt(x)
-abs(x)
-floor(x)
-ceil(x)
+sqrt(x)   // square root
+abs(x)    // absolute value
+floor(x)  // round down
+ceil(x)   // round up
 
 Two variable functions:
-mod(x, y)
-len(x, y)
+a + b
+a - b
+a * b
+a / b
+a ^ b  // power
+a % b  // modulo
+len(x1, y2, x2, y2)  // distance between two points
 ```
 
 # Cool Examples
@@ -107,18 +113,18 @@ x*y/1000
 Swirls
 ```
 (
-x+len(x,y) * sin(sqrt(len(x,y)))
+x+r * sin(sqrt(r))
 ,
-y+len(x,y) * cos(sqrt(len(x,x)))
+y+r * cos(sqrt(len(x,x)))
 )
 ```
 
 Black Hole
 ```
 (
-y/(len(x,y)^2/100000 - 0.001*x)
+y/(r^2/100000 - 0.001*x)
 ,
--x/(len(x,y)^2/10000 - 0.001*y)
+-x/(r^2/10000 - 0.001*y)
 )
 ```
 Mosaic
@@ -132,8 +138,16 @@ Mosaic
 Eye
 ```
 (
-x*cos(abs(sin(t/4))*600/len(x,y)) - y*sin(abs(sin(t/4))*600/len(x,y))
+x*cos(abs(sin(t/4))*600/r) - y*sin(abs(sin(t/4))*600/r)
 ,
-x*sin(abs(sin(t/4))*600/len(x,y)) + y*cos(abs(sin(t/4))*600/len(x,y))
+x*sin(abs(sin(t/4))*600/r) + y*cos(abs(sin(t/4))*600/r)
+)
+```
+Radar
+```
+(
+-y + (1-((x*sin(t) + y*cos(t))/abs(x*sin(t) + y*cos(t))))^10*x
+,
+x  + (1-((x*sin(t) + y*cos(t))/abs(x*sin(t) + y*cos(t))))^10*y
 )
 ```

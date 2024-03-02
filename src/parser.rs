@@ -68,6 +68,7 @@ impl std::fmt::Display for Token {
                     Var::X => write!(f, "x"),
                     Var::Y => write!(f, "y"),
                     Var::T => write!(f, "t"),
+                    Var::R => write!(f, "r"),
                 }
            }
         }
@@ -79,6 +80,7 @@ enum Var {
     X,
     Y,
     T,
+    R,
 }
 
 
@@ -87,7 +89,7 @@ fn lexer(input: &String) -> Result<Vec<Token>, String> {
     let mut token_string = String::new();
     for c in input.chars() {
         match c {
-            '+' | '-' | '*' | '/' | '(' | ')' | ',' | '^' => {
+            '+' | '-' | '*' | '/' | '(' | ')' | ',' | '^' | '%' => {
                 if !token_string.is_empty() {
                     tokens.push(lex_token_string(token_string)?);
                     token_string = String::new();
@@ -111,13 +113,13 @@ fn lex_token_string(token_string: String) -> Result<Token, String> {
         "x" => Ok(Token::Variable(Var::X)),
         "y" => Ok(Token::Variable(Var::Y)),
         "t" => Ok(Token::Variable(Var::T)),
+        "r" => Ok(Token::Variable(Var::R)),
         "sin" => Ok(Token::Operator('S')),
         "cos" => Ok(Token::Operator('C')),
         "tan" => Ok(Token::Operator('T')),
         "sqrt" => Ok(Token::Operator('q')),
         "abs" => Ok(Token::Operator('a')),
         "len" => Ok(Token::Operator('l')),
-        "mod" => Ok(Token::Operator('m')),
         "floor" => Ok(Token::Operator('f')),
         "ceil" => Ok(Token::Operator('c')),
         
@@ -219,6 +221,11 @@ fn parse_mult_div(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<
                 let rhs = parse_exponent(tokens)?;
                 lhs = Expression::Div(Box::new(lhs), Box::new(rhs));
             }
+            Some(Token::Operator('%')) => {
+                tokens.next();
+                let rhs = parse_exponent(tokens)?;
+                lhs = Expression::Mod(Box::new(lhs), Box::new(rhs));
+            }
             // we see anything else we break and move up in recursion layers
             _ => break,
         }
@@ -312,29 +319,6 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
                 None => Err(format!("in fn len expected ')' not end of input")),
             }
         }
-        Some(Token::Operator('m')) => {
-            tokens.next();
-            // expect a '('
-            let lhs: Expression;
-            let rhs: Expression;
-            match tokens.next() {
-                Some(Token::Operator('(')) =>  lhs = prase_add_sub(tokens)?,
-                Some(token) => return Err(format!("in fn mod expected '(' not '{}'" , token)),
-                None => return Err(format!("in fn mod expected '(' not end of input")),
-            }
-            // expect a ','
-            match tokens.next() {
-                Some(Token::Operator(',')) =>  rhs = prase_add_sub(tokens)?,
-                Some(token) => return Err(format!("in fn mod expected ',' not '{}'" , token)),
-                None => return Err(format!("in fn mod expected ',' not end of input")),
-            }
-            // expect a ')'
-            match tokens.next() {
-                Some(Token::Operator(')')) => Ok(Expression::Mod(Box::new(lhs), Box::new(rhs))),
-                Some(e) => Err(format!("in fn mod expected ')' not '{}'", e)),
-                None => Err(format!("in fn mod expected ')' not end of input")),
-            }
-        },
         Some(Token::Operator('-')) => { // unary minus
             parse_expression_variant!(tokens, Neg)
         }
@@ -376,7 +360,6 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
         Some(Token::Operator(c)) => Err(format!("expected expression, not '{}'", c)),
 
         None => Err(format!("expected expression, not end of input")),
-
     }
 }
 
@@ -405,7 +388,7 @@ fn expression_to_str(exp: &Expression) -> String {
             expression_to_str(d)
         ),
         Expression::Pow(a, b) => format!("{}^{}", expression_to_str(a), expression_to_str(b)),
-        Expression::Mod(a, b) => format!("mod({}, {})", expression_to_str(a), expression_to_str(b)),
+        Expression::Mod(a, b) => format!("{}%{}", expression_to_str(a), expression_to_str(b)),
         Expression::Floor(a) => format!("floor{}", expression_to_str(a)),
         Expression::Ceil(a) => format!("ceil{}", expression_to_str(a)),
     }
@@ -435,6 +418,7 @@ fn evaluate(exp: Expression) -> Box<VectorFunctionType> {
                     Var::X => x,
                     Var::Y => y,
                     Var::T => t,
+                    Var::R => (x*x + y*y).sqrt(),
                 }
             })
         }
@@ -548,8 +532,10 @@ fn test_all() {
     let t = 5.0;
     let arg = (x, y, t);
     assert_eq!(interpret("5".to_string()).unwrap()(arg), 5.0);
+    assert_eq!(interpret("(5)".to_string()).unwrap()(arg), 5.0);
     assert_eq!(interpret("-5".to_string()).unwrap()(arg), -5.0);
     assert_eq!(interpret("x".to_string()).unwrap()(arg), x);
+    assert_eq!(interpret("r".to_string()).unwrap()(arg), (x*x+y*y).sqrt());
     assert_eq!(interpret("x+y".to_string()).unwrap()(arg), x+y);
     assert_eq!(interpret("x*y".to_string()).unwrap()(arg), x*y);
     assert_eq!(interpret("x/y".to_string()).unwrap()(arg), x / y);
@@ -560,7 +546,7 @@ fn test_all() {
     assert_eq!(interpret("tan(x)".to_string()).unwrap()(arg), x.tan());
     assert_eq!(interpret("sqrt(x)".to_string()).unwrap()(arg), x.sqrt());
     assert_eq!(interpret("len(x, y, 0, 0)".to_string()).unwrap()(arg), (x*x+y*y).sqrt());
-    assert_eq!(interpret("mod(x, y)".to_string()).unwrap()(arg), x % y);
+    assert_eq!(interpret("x%y".to_string()).unwrap()(arg), x % y);
     assert_eq!(interpret("floor(x)".to_string()).unwrap()(arg), x.floor());
     assert_eq!(interpret("ceil(x)".to_string()).unwrap()(arg), x.ceil());
     assert_eq!(interpret("t".to_string()).unwrap()(arg), t);
@@ -576,6 +562,7 @@ fn test_all() {
     assert_eq!(interpret("x + y * 2".to_string()).unwrap()(arg), x + y * 2.0);
     assert_eq!(interpret("sqrt(x + y)".to_string()).unwrap()(arg), (x + y).sqrt());
     assert_eq!(interpret("len(x, y, 7, 2) / 2".to_string()).unwrap()(arg), ((x-7.0)*(x-7.0) + (y-2.0)*(y-2.0)).sqrt() / 2.0);
+    assert_eq!(interpret("tan(sin(r) + cos(t))".to_string()).unwrap()(arg), ((x*x+y*y).sqrt().sin() + t.cos()).tan());
 }
 
 #[allow(dead_code)]
