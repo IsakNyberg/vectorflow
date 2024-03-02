@@ -182,6 +182,13 @@ fn parser(tokens_iter: impl Iterator<Item = Token>) -> Result<Function, String> 
     Ok(Function::S(Box::new(f)))
 }
 
+macro_rules! parse_binary_expression {
+    ($tokens:expr, $lhs:expr, $function:ident, $expr_variant:ident) => {{
+        $tokens.next(); // Consume the next token.
+        let rhs = $function($tokens)?; // Parse the right-hand side using the passed function.
+        Expression::$expr_variant(Box::new($lhs), Box::new(rhs)) // Construct the new expression.
+    }};
+}
 
 fn prase_add_sub(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<Expression, String> {
     // first go as deep into the recursion as possible (parse_mult_div)
@@ -189,14 +196,10 @@ fn prase_add_sub(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<E
     loop {
         match tokens.peek() {
             Some(Token::Operator('+')) => {
-                tokens.next();
-                let rhs = parse_mult_div(tokens)?;
-                lhs = Expression::Add(Box::new(lhs), Box::new(rhs));
+                lhs = parse_binary_expression!(tokens, lhs, parse_mult_div, Add);
             }
             Some(Token::Operator('-')) => {
-                tokens.next();
-                let rhs = parse_mult_div(tokens)?;
-                lhs = Expression::Sub(Box::new(lhs), Box::new(rhs));
+                lhs = parse_binary_expression!(tokens, lhs, parse_mult_div, Sub);
             }
             _ => break,
         }
@@ -212,19 +215,13 @@ fn parse_mult_div(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<
         // while we can still see a '*' or '/' operator (with numbers in between)
         match tokens.peek() {
             Some(Token::Operator('*')) => {
-                tokens.next();
-                let rhs = parse_exponent(tokens)?;
-                lhs = Expression::Mult(Box::new(lhs), Box::new(rhs));
+                lhs = parse_binary_expression!(tokens, lhs, parse_exponent, Mult);
             }
             Some(Token::Operator('/')) => {
-                tokens.next();
-                let rhs = parse_exponent(tokens)?;
-                lhs = Expression::Div(Box::new(lhs), Box::new(rhs));
+                lhs = parse_binary_expression!(tokens, lhs, parse_exponent, Div);
             }
             Some(Token::Operator('%')) => {
-                tokens.next();
-                let rhs = parse_exponent(tokens)?;
-                lhs = Expression::Mod(Box::new(lhs), Box::new(rhs));
+                lhs = parse_binary_expression!(tokens, lhs, parse_exponent, Mod);
             }
             // we see anything else we break and move up in recursion layers
             _ => break,
@@ -242,9 +239,7 @@ fn parse_exponent(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Result<
         // while we can still see a '^' operator (with numbers in between)
         match tokens.peek() {
             Some(Token::Operator('^')) => {
-                tokens.next();
-                let rhs = parse_exponent(tokens)?;
-                lhs = Expression::Pow(Box::new(lhs), Box::new(rhs));
+                lhs = parse_binary_expression!(tokens, lhs, parse_num_bracket, Pow);
             },
             // we see anything else we break and move up in recursion layers
             _ => break,
