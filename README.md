@@ -85,6 +85,7 @@ cos(x)
 tan(x)
 sqrt(x)   // square root
 abs(x)    // absolute value
+sgn(x)    // signum function
 floor(x)  // round down
 ceil(x)   // round up
 

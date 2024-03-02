@@ -31,6 +31,7 @@ enum Expression {
     Cos(Box<Expression>),
     Tan(Box<Expression>),
     Abs(Box<Expression>),
+    Sgn(Box<Expression>),
     Floor(Box<Expression>),
     Ceil(Box<Expression>),
     Sqrt(Box<Expression>),
@@ -57,7 +58,10 @@ impl std::fmt::Display for Token {
                     'T' => write!(f, "tan"),
                     'q' => write!(f, "sqrt"),
                     'a' => write!(f, "abs"),
-                    // 'l' => write!(f, "len"),
+                    'l' => write!(f, "len"),
+                    'f' => write!(f, "floor"),
+                    'c' => write!(f, "ceil"),
+                    's' => write!(f, "sgn"),
                     c => write!(f, "{}", c),
                 }
            },
@@ -119,6 +123,7 @@ fn lex_token_string(token_string: String) -> Result<Token, String> {
         "tan" => Ok(Token::Operator('T')),
         "sqrt" => Ok(Token::Operator('q')),
         "abs" => Ok(Token::Operator('a')),
+        "sgn" => Ok(Token::Operator('s')),
         "len" => Ok(Token::Operator('l')),
         "floor" => Ok(Token::Operator('f')),
         "ceil" => Ok(Token::Operator('c')),
@@ -287,13 +292,13 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
             match tokens.next() {
                 Some(Token::Operator('(')) =>  x1 = prase_add_sub(tokens)?,
                 Some(token) => return Err(format!("in fn len argument 1: expected '(' not '{}'" , token)),
-                None => return Err(format!("in fn len argument 1: '(' not end of input")),
+                None => return Err(format!("in fn len argument 1: expected '(' not end of input")),
             }
             // expect a ','
             match tokens.next() {
                 Some(Token::Operator(',')) =>  y1 = prase_add_sub(tokens)?,
                 Some(token) => return Err(format!("in fn len argument 2: expected ',' not '{}'" , token)),
-                None => return Err(format!("in fn len argument 2: ',' not end of input")),
+                None => return Err(format!("in fn len argument 2: expected ',' not end of input")),
             }
             // expect a ','
             match tokens.next() {
@@ -305,7 +310,7 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
             match tokens.next() {
                 Some(Token::Operator(',')) =>  y2 = prase_add_sub(tokens)?,
                 Some(token) => return Err(format!("in fn len argument 4: expected ',' not '{}'" , token)),
-                None => return Err(format!("in fn len argument 4: ',' not end of input")),
+                None => return Err(format!("in fn len argument 4: expected ',' not end of input")),
             }
             // expect a ')'
             match tokens.next() {
@@ -328,6 +333,9 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
         }
         Some(Token::Operator('a')) => {
             parse_expression_variant!(tokens, Abs)
+        }
+        Some(Token::Operator('s')) => {
+            parse_expression_variant!(tokens, Sgn)
         }
         Some(Token::Operator('q')) => {
             parse_expression_variant!(tokens, Sqrt)
@@ -374,6 +382,7 @@ fn expression_to_str(exp: &Expression) -> String {
         Expression::Tan(a) => format!("tan{}", expression_to_str(a)),
         Expression::Sqrt(a) => format!("sqrt{}", expression_to_str(a)),
         Expression::Abs(a) => format!("abs{}", expression_to_str(a)),
+        Expression::Sgn(a) => format!("sgn{}", expression_to_str(a)),
         Expression::Neg(a) => format!("-{}", expression_to_str(a)),
         Expression::Len(a, b, c, d) => format!(
             "len({}, {}, {}, {})", 
@@ -427,14 +436,17 @@ fn evaluate(exp: Expression) -> Box<VectorFunctionType> {
         Expression::Sin(a) => {
             evaluate_unary_expression!(a, |x: f64| f64::sin(x))
         }
-        Expression::Abs(a) => {
-            evaluate_unary_expression!(a, |x: f64| f64::abs(x))
-        }
         Expression::Cos(a) => {
             evaluate_unary_expression!(a, |x: f64| f64::cos(x))
         }
         Expression::Tan(a) => {
             evaluate_unary_expression!(a, |x: f64| f64::tan(x))
+        }
+        Expression::Abs(a) => {
+            evaluate_unary_expression!(a, |x: f64| f64::abs(x))
+        }
+        Expression::Sgn(a) => {
+            evaluate_unary_expression!(a, |x: f64| x.signum())
         }
         Expression::Sqrt(a) => {
             evaluate_unary_expression!(a, |x: f64| f64::sqrt(x))
@@ -536,6 +548,9 @@ fn test_all() {
     assert_eq!(interpret("x/y".to_string()).unwrap()(arg), x / y);
     assert_eq!(interpret("x/(y+x)".to_string()).unwrap()(arg), x / (y+x));
     assert_eq!(interpret("x^y".to_string()).unwrap()(arg), x.powf(y));
+    assert_eq!(interpret("sgn(x)".to_string()).unwrap()(arg), f64::signum(x));
+    assert_eq!(interpret("sgn(-x)".to_string()).unwrap()(arg), f64::signum(-x));
+    assert_eq!(interpret("sgn(0)".to_string()).unwrap()(arg), f64::signum(0.0));
     assert_eq!(interpret("abs(x)".to_string()).unwrap()(arg), x.abs());
     assert_eq!(interpret("sin(x)".to_string()).unwrap()(arg), x.sin());
     assert_eq!(interpret("tan(x)".to_string()).unwrap()(arg), x.tan());
