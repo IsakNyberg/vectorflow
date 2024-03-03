@@ -73,6 +73,7 @@ impl std::fmt::Display for Token {
                     Var::Y => write!(f, "y"),
                     Var::T => write!(f, "t"),
                     Var::R => write!(f, "r"),
+                    Var::A => write!(f, "a"),
                 }
            }
         }
@@ -85,6 +86,7 @@ enum Var {
     Y,
     T,
     R,
+    A,
 }
 
 impl std::fmt::Display for Var {
@@ -94,6 +96,7 @@ impl std::fmt::Display for Var {
             Var::Y => write!(f, "y"),
             Var::T => write!(f, "t"),
             Var::R => write!(f, "r"),
+            Var::A => write!(f, "a"),
         }
     }
 }
@@ -129,6 +132,7 @@ fn lex_token_string(token_string: String) -> Result<Token, String> {
         "y" => Ok(Token::Variable(Var::Y)),
         "t" => Ok(Token::Variable(Var::T)),
         "r" => Ok(Token::Variable(Var::R)),
+        "a" => Ok(Token::Variable(Var::A)),
         "sin" => Ok(Token::Operator('S')),
         "cos" => Ok(Token::Operator('C')),
         "tan" => Ok(Token::Operator('T')),
@@ -434,6 +438,13 @@ fn evaluate(exp: Expression) -> Box<VectorFunctionType> {
                     Var::Y => y,
                     Var::T => t,
                     Var::R => (x*x + y*y).sqrt(),
+                    Var::A => {
+                        let mut angle = y.atan2(x);
+                        if angle < 0.0 {
+                            angle += 2.0 * std::f64::consts::PI;
+                        }
+                        angle
+                    }
                 }
             })
         }
@@ -509,29 +520,30 @@ fn evaluate(exp: Expression) -> Box<VectorFunctionType> {
 fn random_expression(depth: usize) -> Expression {
     let mut rng = rand::thread_rng();
     let seed = rng.gen_range(0..usize::MAX);
-    let n = seed % usize::min(1+depth*5, 21);
+    let n = seed % usize::min(1+depth*5, 22);
     match n {
         0 => Expression::Number(1.0+(seed % 1000) as f64),
         1 => Expression::Variable(Var::X),
         2 => Expression::Variable(Var::Y),
         3 => Expression::Variable(Var::T),
         4 => Expression::Variable(Var::R),
-        5 => Expression::Add(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
-        6 => Expression::Sub(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
-        7 => Expression::Mult(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
-        8 => Expression::Div(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
-        9 => Expression::Neg(Box::new(random_expression(depth-1))),
-        10 => Expression::Sin(Box::new(random_expression(depth-1))),
-        11 => Expression::Cos(Box::new(random_expression(depth-1))),
-        12 => Expression::Tan(Box::new(random_expression(depth-1))),
-        13 => Expression::Abs(Box::new(random_expression(depth-1))),
-        14 => Expression::Sgn(Box::new(random_expression(depth-1))),
-        15 => Expression::Sqrt(Box::new(random_expression(depth-1))),
-        16 => Expression::Pow(Box::new(random_expression(depth-1)), Box::new(random_expression(1))),
-        17 => Expression::Mod(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
-        18 => Expression::Len(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
-        19 => Expression::Floor(Box::new(random_expression(depth-1))),
-        20 => Expression::Ceil(Box::new(random_expression(depth-1))),
+        5 => Expression::Variable(Var::A),
+        6 => Expression::Add(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        7 => Expression::Sub(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        8 => Expression::Mult(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        9 => Expression::Div(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        10 => Expression::Neg(Box::new(random_expression(depth-1))),
+        11 => Expression::Sin(Box::new(random_expression(depth-1))),
+        12 => Expression::Cos(Box::new(random_expression(depth-1))),
+        13 => Expression::Tan(Box::new(random_expression(depth-1))),
+        14 => Expression::Abs(Box::new(random_expression(depth-1))),
+        15 => Expression::Sgn(Box::new(random_expression(depth-1))),
+        16 => Expression::Sqrt(Box::new(random_expression(depth-1))),
+        17 => Expression::Pow(Box::new(random_expression(depth-1)), Box::new(random_expression(1))),
+        18 => Expression::Mod(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        19 => Expression::Len(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        20 => Expression::Floor(Box::new(random_expression(depth-1))),
+        21 => Expression::Ceil(Box::new(random_expression(depth-1))),
         _ => panic!("unexpected number"),
     }
 }
@@ -596,6 +608,7 @@ fn test_all() {
     assert_eq!(interpret("-5".to_string()).unwrap()(arg), -5.0);
     assert_eq!(interpret("x".to_string()).unwrap()(arg), x);
     assert_eq!(interpret("r".to_string()).unwrap()(arg), (x*x+y*y).sqrt());
+    assert_eq!(interpret("a".to_string()).unwrap()(arg), y.atan2(x));
     assert_eq!(interpret("x+y".to_string()).unwrap()(arg), x+y);
     assert_eq!(interpret("x*y".to_string()).unwrap()(arg), x*y);
     assert_eq!(interpret("x/y".to_string()).unwrap()(arg), x / y);
