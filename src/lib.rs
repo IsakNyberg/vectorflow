@@ -26,9 +26,9 @@ const STARTING_NUM_PARTICLES: usize = 10_000;
 const BACKGROUND_COLOUR: &str = "#000";
 const FOREGROUND_COLOUR: &str = "#1ce";
 const DEFAULT_FUNCTION: &str = "(
-200*abs(cos(len(x, y)/25))
+200*abs(cos(r/25))
 ,
-200*sin(len(x, y)/25)
+200*sin(r/25)
 )";
 struct Config {
     width: usize,
@@ -199,6 +199,7 @@ impl AnimationCanvas {
         for particle in self.particles.iter_mut() {
             if !particle.update(&self.config.func, delta, t) { 
                 particle.respawn();
+                particle.update(&self.config.func, delta, t);
             }
         }
     }
