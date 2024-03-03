@@ -17,6 +17,7 @@ use parser::{interpret_field_function, pretty_print};
 pub enum Msg {
     Init,
     Render,
+    RandomFunction,
     UpdateFunc(String),
 }
 
@@ -156,8 +157,49 @@ impl Component for AnimationCanvas {
                         self.func_error_message = e;
                     }
                 }
-                
                 false
+            }
+            Msg::RandomFunction => {
+                let mut counter = 0;
+                loop {
+                    let func_string = parser::random_field_function(7);
+                    counter += 1;
+                    match interpret_field_function(&func_string) {
+                        Ok(f) => {
+                            // sample 10 random coordinates
+                            let mut valid_count = 0;
+                            for _ in 0..100 {
+                                // samples between self.config.width and -self.config.width
+                                let x = (js_sys::Math::random() * self.config.width as f64 * 2.0) - self.config.width as f64;
+                                let y = (js_sys::Math::random() * self.config.height as f64 * 2.0) - self.config.height as f64;
+                                let t = js_sys::Math::random() * 60.0;
+                                let (dx, dy) = f((x, y, t));
+
+                                // significant velocity in both x and y direction
+                                if dx.abs() < 10.0 || dy.abs() < 10.0 {
+                                    continue;
+                                }
+                                // total velocity is not too large
+                                if (dx * dx + dy * dy).sqrt() > 1000.0 {
+                                    continue;
+                                }
+                                if dx.is_nan() || dy.is_nan() {
+                                    continue;
+                                }
+                                valid_count += 1;
+                            }
+                            
+                            if valid_count > 30 {
+                                self.config.func = f;
+                                self.func_string = func_string;
+                                info!("found function after {} attempts\n{}", counter, pretty_print(self.func_string.to_string())); 
+                                self.func_error_message = "".to_string();
+                                return false;
+                            }
+                        },
+                        _ => {},
+                    }
+                }
             }
         }
     }
@@ -178,7 +220,10 @@ impl Component for AnimationCanvas {
                 <div style="position: absolute; color: #1ce;"> 
                     <FunctionInput {on_change} value={self.func_string.clone()} />
                     {func_error_message_html}
-                    <div> {"FPS: "} {self.average_fps as usize } {"    Particles: "} {self.particles.len()} </div>
+                    <div> 
+                        <button class="button" onclick={ctx.link().callback(|_| Msg::RandomFunction)}> {"🎲"} </button> 
+                        {"FPS: "} {self.average_fps as usize } {"    Particles: "} {self.particles.len()} 
+                    </div>
                 </div>
                 <canvas
                     id="canvas"
