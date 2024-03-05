@@ -6,7 +6,7 @@
 // It returns a closeure that takes a tuple of two f64 (x, y, t) and returns a f64
 
 use rand::Rng;
-use std::{iter::Peekable, usize};
+use std::iter::Peekable;
 
 type VectorFunctionType = dyn Fn((f64, f64, f64)) -> f64;
 
@@ -440,7 +440,7 @@ fn evaluate(exp: Expression) -> Box<VectorFunctionType> {
                     Var::R => (x*x + y*y).sqrt(),
                     Var::A => {
                         let mut angle = y.atan2(x);
-                        if angle < 0.0 {
+                        if angle.is_sign_negative() {
                             angle += 2.0 * std::f64::consts::PI;
                         }
                         angle
@@ -520,7 +520,7 @@ fn evaluate(exp: Expression) -> Box<VectorFunctionType> {
 fn random_expression(depth: usize) -> Expression {
     let mut rng = rand::thread_rng();
     let seed = rng.gen_range(0..usize::MAX);
-    let n = seed % usize::min(1+depth*5, 22);
+    let n = seed % usize::min(1+depth*5, 21);
     match n {
         0 => Expression::Number(1.0+(seed % 1000) as f64),
         1 => Expression::Variable(Var::X),
@@ -538,12 +538,12 @@ fn random_expression(depth: usize) -> Expression {
         13 => Expression::Tan(Box::new(random_expression(depth-1))),
         14 => Expression::Abs(Box::new(random_expression(depth-1))),
         15 => Expression::Sgn(Box::new(random_expression(depth-1))),
-        16 => Expression::Sqrt(Box::new(random_expression(depth-1))),
-        17 => Expression::Pow(Box::new(random_expression(depth-1)), Box::new(random_expression(1))),
-        18 => Expression::Mod(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
-        19 => Expression::Len(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
-        20 => Expression::Floor(Box::new(random_expression(depth-1))),
-        21 => Expression::Ceil(Box::new(random_expression(depth-1))),
+        16 => Expression::Pow(Box::new(random_expression(depth-1)), Box::new(random_expression(1))),
+        17 => Expression::Mod(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        18 => Expression::Len(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        19 => Expression::Floor(Box::new(random_expression(depth-1))),
+        20 => Expression::Ceil(Box::new(random_expression(depth-1))),
+        //16 => Expression::Sqrt(Box::new(random_expression(depth-1))), // too many functions are invalid for negative numbers
         _ => panic!("unexpected number"),
     }
 }
