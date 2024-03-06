@@ -3,9 +3,9 @@
 // it can parse single line expressions with the exact two variables x and y
 // it can also parse constants: pi, e
 // it assumses all numbers are floating point numbers
-// It returns a closeure that takes a tuple of two f64 (x, y) and returns a f64
+// It returns a closeure that takes a tuple of two f64 (x, y, t) and returns a f64
 
-
+use rand::Rng;
 use std::iter::Peekable;
 
 type VectorFunctionType = dyn Fn((f64, f64, f64)) -> f64;
@@ -73,6 +73,7 @@ impl std::fmt::Display for Token {
                     Var::Y => write!(f, "y"),
                     Var::T => write!(f, "t"),
                     Var::R => write!(f, "r"),
+                    Var::A => write!(f, "a"),
                 }
            }
         }
@@ -85,6 +86,19 @@ enum Var {
     Y,
     T,
     R,
+    A,
+}
+
+impl std::fmt::Display for Var {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Var::X => write!(f, "x"),
+            Var::Y => write!(f, "y"),
+            Var::T => write!(f, "t"),
+            Var::R => write!(f, "r"),
+            Var::A => write!(f, "a"),
+        }
+    }
 }
 
 
@@ -118,6 +132,7 @@ fn lex_token_string(token_string: String) -> Result<Token, String> {
         "y" => Ok(Token::Variable(Var::Y)),
         "t" => Ok(Token::Variable(Var::T)),
         "r" => Ok(Token::Variable(Var::R)),
+        "a" => Ok(Token::Variable(Var::A)),
         "sin" => Ok(Token::Operator('S')),
         "cos" => Ok(Token::Operator('C')),
         "tan" => Ok(Token::Operator('T')),
@@ -370,31 +385,31 @@ fn parse_num_bracket(tokens: &mut Peekable<impl Iterator<Item = Token>>) -> Resu
 
 fn expression_to_str(exp: &Expression) -> String { 
     match exp {
-        Expression::Add(a, b) => format!("{} + {}", expression_to_str(a), expression_to_str(b)),
-        Expression::Sub(a, b) => format!("{} - {}", expression_to_str(a), expression_to_str(b)),
-        Expression::Mult(a, b) => format!("{} * {}", expression_to_str(a), expression_to_str(b)),
-        Expression::Div(a, b) => format!("{} / {}", expression_to_str(a), expression_to_str(b)),
+        Expression::Add(a, b) => format!("({}) + ({})", expression_to_str(a), expression_to_str(b)),
+        Expression::Sub(a, b) => format!("({}) - ({})", expression_to_str(a), expression_to_str(b)),
+        Expression::Mult(a, b) => format!("({}) * ({})", expression_to_str(a), expression_to_str(b)),
+        Expression::Div(a, b) => format!("({}) / ({})", expression_to_str(a), expression_to_str(b)),
         Expression::Number(n) => n.to_string(),
         Expression::Brackets(a) => format!("({})", expression_to_str(a)),
-        Expression::Variable(s) => format!("{:?}", s),
-        Expression::Sin(a) => format!("sin{}", expression_to_str(a)),
-        Expression::Cos(a) => format!("cos{}", expression_to_str(a)),
-        Expression::Tan(a) => format!("tan{}", expression_to_str(a)),
-        Expression::Sqrt(a) => format!("sqrt{}", expression_to_str(a)),
-        Expression::Abs(a) => format!("abs{}", expression_to_str(a)),
-        Expression::Sgn(a) => format!("sgn{}", expression_to_str(a)),
-        Expression::Neg(a) => format!("-{}", expression_to_str(a)),
+        Expression::Variable(s) => s.to_string(),
+        Expression::Sin(a) => format!("sin({})", expression_to_str(a)),
+        Expression::Cos(a) => format!("cos({})", expression_to_str(a)),
+        Expression::Tan(a) => format!("tan({})", expression_to_str(a)),
+        Expression::Sqrt(a) => format!("sqrt({})", expression_to_str(a)),
+        Expression::Abs(a) => format!("abs({})", expression_to_str(a)),
+        Expression::Sgn(a) => format!("sgn({})", expression_to_str(a)),
+        Expression::Neg(a) => format!("-({})", expression_to_str(a)),
         Expression::Len(a, b, c, d) => format!(
             "len({}, {}, {}, {})", 
             expression_to_str(a), 
             expression_to_str(b), 
             expression_to_str(c), 
-            expression_to_str(d)
+            expression_to_str(d),
         ),
-        Expression::Pow(a, b) => format!("{}^{}", expression_to_str(a), expression_to_str(b)),
-        Expression::Mod(a, b) => format!("{}%{}", expression_to_str(a), expression_to_str(b)),
-        Expression::Floor(a) => format!("floor{}", expression_to_str(a)),
-        Expression::Ceil(a) => format!("ceil{}", expression_to_str(a)),
+        Expression::Pow(a, b) => format!("({})^({})", expression_to_str(a), expression_to_str(b)),
+        Expression::Mod(a, b) => format!("({})%({})", expression_to_str(a), expression_to_str(b)),
+        Expression::Floor(a) => format!("floor({})", expression_to_str(a)),
+        Expression::Ceil(a) => format!("ceil({})", expression_to_str(a)),
     }
 }
 
@@ -423,6 +438,13 @@ fn evaluate(exp: Expression) -> Box<VectorFunctionType> {
                     Var::Y => y,
                     Var::T => t,
                     Var::R => (x*x + y*y).sqrt(),
+                    Var::A => {
+                        let mut angle = y.atan2(x);
+                        if angle.is_sign_negative() {
+                            angle += 2.0 * std::f64::consts::PI;
+                        }
+                        angle
+                    }
                 }
             })
         }
@@ -495,6 +517,49 @@ fn evaluate(exp: Expression) -> Box<VectorFunctionType> {
 }
 
 
+fn random_expression(depth: usize) -> Expression {
+    let mut rng = rand::thread_rng();
+    let seed = rng.gen_range(0..usize::MAX);
+    let n = seed % usize::min(1+depth*5, 21);
+    match n {
+        0 => Expression::Number(1.0+(seed % 1000) as f64),
+        1 => Expression::Variable(Var::X),
+        2 => Expression::Variable(Var::Y),
+        3 => Expression::Variable(Var::T),
+        4 => Expression::Variable(Var::R),
+        5 => Expression::Variable(Var::A),
+        6 => Expression::Add(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        7 => Expression::Sub(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        8 => Expression::Mult(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        9 => Expression::Div(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        10 => Expression::Neg(Box::new(random_expression(depth-1))),
+        11 => Expression::Sin(Box::new(random_expression(depth-1))),
+        12 => Expression::Cos(Box::new(random_expression(depth-1))),
+        13 => Expression::Tan(Box::new(random_expression(depth-1))),
+        14 => Expression::Abs(Box::new(random_expression(depth-1))),
+        15 => Expression::Sgn(Box::new(random_expression(depth-1))),
+        16 => Expression::Pow(Box::new(random_expression(depth-1)), Box::new(random_expression(1))),
+        17 => Expression::Mod(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        18 => Expression::Len(Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1)), Box::new(random_expression(depth-1))),
+        19 => Expression::Floor(Box::new(random_expression(depth-1))),
+        20 => Expression::Ceil(Box::new(random_expression(depth-1))),
+        //16 => Expression::Sqrt(Box::new(random_expression(depth-1))), // too many functions are invalid for negative numbers
+        _ => panic!("unexpected number"),
+    }
+}
+
+#[allow(dead_code)]
+pub fn random_function(depth: usize) -> String {
+    let exp = random_expression(depth);
+    expression_to_str(&exp)
+}
+
+pub fn random_field_function(depth: usize) -> String {
+    let exp_x = random_expression(depth);
+    let exp_y = random_expression(depth);
+    format!("(\n{}\n,\n{}\n)", expression_to_str(&exp_x), expression_to_str(&exp_y))
+}
+
 pub fn pretty_print(input: String) -> String {
     let tokens = match lexer(&input) {
         Ok(tokens) => tokens,
@@ -543,6 +608,7 @@ fn test_all() {
     assert_eq!(interpret("-5".to_string()).unwrap()(arg), -5.0);
     assert_eq!(interpret("x".to_string()).unwrap()(arg), x);
     assert_eq!(interpret("r".to_string()).unwrap()(arg), (x*x+y*y).sqrt());
+    assert_eq!(interpret("a".to_string()).unwrap()(arg), y.atan2(x));
     assert_eq!(interpret("x+y".to_string()).unwrap()(arg), x+y);
     assert_eq!(interpret("x*y".to_string()).unwrap()(arg), x*y);
     assert_eq!(interpret("x/y".to_string()).unwrap()(arg), x / y);
@@ -573,6 +639,31 @@ fn test_all() {
     assert_eq!(interpret("sqrt(x + y)".to_string()).unwrap()(arg), (x + y).sqrt());
     assert_eq!(interpret("len(x, y, 7, 2) / 2".to_string()).unwrap()(arg), ((x-7.0)*(x-7.0) + (y-2.0)*(y-2.0)).sqrt() / 2.0);
     assert_eq!(interpret("tan(sin(r) + cos(t))".to_string()).unwrap()(arg), ((x*x+y*y).sqrt().sin() + t.cos()).tan());
+}
+
+
+#[test]
+fn test_random() {
+    // create 1000 random functions and compare the result before and faster parsing it as a string
+    for _ in 1..1000 {
+        let exp = random_expression(30);
+        let exp_str = expression_to_str(&exp);
+        println!("{}", exp_str);
+        let fun_original = evaluate(exp);
+        let fun_str = interpret(exp_str).unwrap();
+
+        // take 25 different random arguments and compare the results
+        for _ in 1..25 {
+            let x = rand::thread_rng().gen_range(-100.0..100.0);
+            let y = rand::thread_rng().gen_range(-100.0..100.0);
+            let t = rand::thread_rng().gen_range(-100.0..100.0);
+            let arg = (x, y, t);
+            if fun_original(arg).is_nan() && fun_str(arg).is_nan() {
+                continue;
+            }
+            assert_eq!(fun_original(arg), fun_str(arg));
+        }
+    }
 }
 
 #[allow(dead_code)]
