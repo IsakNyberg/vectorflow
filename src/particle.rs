@@ -1,6 +1,3 @@
-
-use rand::{thread_rng, Rng};
-
 #[derive(Clone, Copy)]
 pub struct Particle {
     pub pos: (f64, f64),
@@ -12,11 +9,10 @@ pub struct Particle {
 
 impl Particle {
     pub fn new(domain: (i32, i32), range: (i32, i32), lifetime: i32) -> Self {
-        let mut randy = thread_rng();
         let space = (domain, range);
-        let y = randy.gen_range(domain.0..domain.1) as f64;
-        let x = randy.gen_range(range.0..range.1) as f64;
-        let lifetime = randy.gen_range(0..lifetime*2);
+        let y = rand::random_range(domain.0..domain.1) as f64;
+        let x = rand::random_range(range.0..range.1) as f64;
+        let lifetime = rand::random_range(0..lifetime * 2);
         Self {
             pos: (x, y),
             velocity: (0.0, 0.0),
@@ -26,7 +22,12 @@ impl Particle {
         }
     }
 
-    pub fn update(&mut self, lambda: &Box<dyn Fn((f64, f64, f64)) -> (f64, f64)>, delta: f64, t: f64) -> bool {
+    pub fn update(
+        &mut self,
+        lambda: &Box<dyn Fn((f64, f64, f64)) -> (f64, f64)>,
+        delta: f64,
+        t: f64,
+    ) -> bool {
         self.tick += 1;
         let (x, y) = self.pos;
         self.velocity = lambda((x, y, t));
@@ -35,16 +36,15 @@ impl Particle {
         self.pos.1 += self.velocity.1 * delta / 1000.0;
 
         self.tick < self.lifetime
-        && (self.pos.0 as i32) > self.space.0.0
-        && (self.pos.0 as i32) < self.space.0.1
-        && (self.pos.1 as i32) > self.space.1.0
-        && (self.pos.1 as i32) < self.space.1.1
+            && (self.pos.0 as i32) > self.space.0 .0
+            && (self.pos.0 as i32) < self.space.0 .1
+            && (self.pos.1 as i32) > self.space.1 .0
+            && (self.pos.1 as i32) < self.space.1 .1
     }
 
     pub fn respawn(&mut self) -> () {
-        let mut randy = thread_rng();
-        let y = randy.gen_range(self.space.0.0..self.space.0.1) as f64;
-        let x = randy.gen_range(self.space.1.0..self.space.1.1) as f64;
+        let y = rand::random_range(self.space.0 .0..self.space.0 .1) as f64;
+        let x = rand::random_range(self.space.1 .0..self.space.1 .1) as f64;
         self.pos = (x, y);
         self.velocity = (0.0, 0.0);
         self.tick = 0;
